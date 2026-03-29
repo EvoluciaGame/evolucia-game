@@ -63,7 +63,7 @@ const IS_TOUCH_DEVICE =
   navigator.maxTouchPoints > 0 ||
   "ontouchstart" in window;
 
-const MOBILE_LIGHT_MODE = IS_TOUCH_DEVICE;
+const MOBILE_LIGHT_MODE = false;
 const GAME_RENDERER_TYPE = Phaser.AUTO;
 
 // Settings
