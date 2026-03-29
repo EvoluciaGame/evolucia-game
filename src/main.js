@@ -1,5 +1,13 @@
 import Phaser from "phaser";
 
+function getViewportSize() {
+  const vv = window.visualViewport;
+  return {
+    width: Math.round(vv?.width || window.innerWidth),
+    height: Math.round(vv?.height || window.innerHeight),
+  };
+}
+
 const SERVER_URL = "/api";
 const FORCE_NO_DECOMPOSE = true;
 
@@ -2591,8 +2599,7 @@ class DungeonScene extends Phaser.Scene {
 const config = {
   type: GAME_RENDERER_TYPE,
   parent: "app",
-  width: window.innerWidth,
-  height: window.innerHeight, * window.devicePixelRatio,
+  ...getViewportSize(),
   backgroundColor: "#0b0b0f",
 
   resolution: 1,
