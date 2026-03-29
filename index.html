@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EvoluCritters</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  </head>
+  <body style="margin:0; background:#0b0b0f; overflow:hidden;">
+    <div id="app"></div>
+
+    <div id="stickBase" style="
+      position:fixed; left:18px; bottom:18px; width:140px; height:140px;
+      border-radius:999px; background:rgba(255,255,255,0.08);
+      touch-action:none; user-select:none;
+      display:flex; align-items:center; justify-content:center;">
+      <div id="stickKnob" style="
+        width:62px; height:62px; border-radius:999px;
+        background:rgba(255,255,255,0.16);
+        transform:translate(0px,0px);">
+      </div>
+    </div>
+
+    <div id="hud" style="
+      position:fixed; right:12px; top:12px; color:white; font-family:system-ui;
+      background:rgba(0,0,0,0.35); padding:10px 12px; border-radius:12px;">
+      <div><b>EvoluCritters</b></div>
+      <div id="hudLine">…</div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
