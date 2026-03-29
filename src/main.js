@@ -1952,8 +1952,11 @@ class MainScene extends Phaser.Scene {
     this.load.tilemapTiledJSON("evoMap", "/maps/evolucia.json");
     this.load.image("evoBg", "/maps/background_v2.png");
 
+    // Foreground immer laden, damit Occlusion auch auf Mobile funktioniert
+    this.load.image("evoFg", "/maps/foreground_v2.png");
+
+    // Partikel kannst du auf Mobile weiter auslassen, wenn du willst
     if (!MOBILE_LIGHT_MODE) {
-      this.load.image("evoFg", "/maps/foreground_v2.png");
       this.load.image("spore", "/effects/spore.png");
     }
 
@@ -2011,7 +2014,7 @@ class MainScene extends Phaser.Scene {
 
     this.add.image(0, 0, "evoBg").setOrigin(0, 0).setDepth(-100);
 
-    if (!MOBILE_LIGHT_MODE && this.textures.exists("spore")) {
+    if (this.textures.exists("spore")) {
       const spores = this.add.particles(0, 0, "spore", {
         x: { min: 0, max: this.worldWidth },
         y: { min: 0, max: this.worldHeight },
@@ -2115,7 +2118,8 @@ class MainScene extends Phaser.Scene {
     this.player.setDepth(100);
     this.player.setFlipX(false);
 
-    if (!MOBILE_LIGHT_MODE && this.textures.exists("evoFg")) {
+    // Foreground immer anzeigen, wenn Textur vorhanden ist
+    if (this.textures.exists("evoFg")) {
       this.foreground = this.add
         .image(0, 0, "evoFg")
         .setOrigin(0, 0)
