@@ -2592,7 +2592,7 @@ const config = {
   type: GAME_RENDERER_TYPE,
   parent: "app",
   width: window.innerWidth,
-  height: window.innerHeight,
+  height: window.innerHeight, * window.devicePixelRatio,
   backgroundColor: "#0b0b0f",
 
   resolution: 1,
