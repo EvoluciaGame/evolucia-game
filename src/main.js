@@ -2659,8 +2659,20 @@ async function bootstrap() {
     game.renderer.config.antialiasGL = !IS_TOUCH_DEVICE;
   }
 
-  window.addEventListener("resize", () => {
-    game.scale.resize(window.innerWidth, window.innerHeight);
+  const applyViewportResize = () => {
+    const { width, height } = getViewportSize();
+    game.scale.resize(width, height);
+  };
+
+  window.addEventListener("resize", applyViewportResize);
+  window.visualViewport?.addEventListener("resize", applyViewportResize);
+
+  window.screen?.orientation?.addEventListener?.("change", () => {
+    setTimeout(applyViewportResize, 150);
+  });
+
+  window.addEventListener("orientationchange", () => {
+    setTimeout(applyViewportResize, 150);
   });
 }
 
