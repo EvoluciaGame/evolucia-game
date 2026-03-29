@@ -1679,7 +1679,7 @@ class MenuScene extends Phaser.Scene {
     this.bg = this.add
       .image(0, 0, "menu_bg")
       .setOrigin(0, 0)
-      .setDisplaySize(layout.width, layout.height)
+      .setDisplaySize(layout.width, layout.width * (this.textures.get("menu_bg").getSourceImage().height / this.textures.get("menu_bg").getSourceImage().width))
       .setDepth(-100);
 
     this.overlay = this.add
