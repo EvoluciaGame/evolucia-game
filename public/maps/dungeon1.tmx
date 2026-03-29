@@ -75,7 +75,7 @@
   <object id="20" name="teleport_to_evolucia" x="2444.83" y="900" width="244.828" height="206.897">
    <properties>
     <property name="spawnX" type="int" value="3200"/>
-    <property name="spawnY" type="int" value="3000"/>
+    <property name="spawnY" type="int" value="3800"/>
     <property name="targetMap" value="evolucia"/>
    </properties>
   </object>

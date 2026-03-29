@@ -107,7 +107,7 @@
                         {
                          "name":"spawnY",
                          "type":"int",
-                         "value":700
+                         "value":1200
                         }, 
                         {
                          "name":"targetMap",

@@ -38,10 +38,10 @@
         },
         "evolucia.tmx": {
             "scale": 0.5,
-            "selectedLayer": 4,
+            "selectedLayer": 2,
             "viewCenter": {
-                "x": 1716,
-                "y": 1288
+                "x": 3216,
+                "y": 3118
             }
         }
     },

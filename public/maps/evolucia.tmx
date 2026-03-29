@@ -78,7 +78,7 @@
   <object id="266" name="dungeon_entry" type="dungeon" x="3696.97" y="3412.12" width="157.576" height="121.212">
    <properties>
     <property name="spawnX" type="int" value="2500"/>
-    <property name="spawnY" type="int" value="700"/>
+    <property name="spawnY" type="int" value="1200"/>
     <property name="targetMap" value="dungeon1"/>
    </properties>
   </object>

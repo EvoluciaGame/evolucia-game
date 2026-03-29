@@ -43,8 +43,8 @@ const WORLD_HEIGHT = 4096;
 const DEFAULT_MAIN_SPAWN_X = 2048;
 const DEFAULT_MAIN_SPAWN_Y = 2300;
 
-// Für Spawn-Debug erstmal false lassen.
-const USE_SAVED_POSITION = false;
+// Jetzt true, damit DB-Position wieder genutzt wird.
+const USE_SAVED_POSITION = true;
 
 // Audio
 const AUDIO_MENU_KEY = "menu_music";
@@ -330,6 +330,25 @@ async function apiOwnershipRefresh() {
   }
 
   return r.json();
+}
+
+// ----------------------
+// Save helper
+// ----------------------
+function saveCurrentPlayerState(scene) {
+  if (!scene?.player) return;
+
+  profile.x = scene.player.x;
+  profile.y = scene.player.y;
+
+  apiSave({
+    xp: profile.xp,
+    level: profile.level,
+    selectedCritterId: profile.selectedCritterId,
+    x: profile.x,
+    y: profile.y,
+    equippedAccessories: profile.equippedAccessories,
+  });
 }
 
 // ----------------------
@@ -650,49 +669,145 @@ function openSceneSettings(scene, uiScale = 1) {
   ]);
 }
 
-function createSceneSettingsButton(scene, uiScale = 1) {
-  const { width } = scene.scale;
-  const x = width - Math.round(34 * uiScale);
-  const y = Math.round(34 * uiScale);
-  const r = Math.round(22 * uiScale);
+// ----------------------
+// Top-right buttons
+// ----------------------
+let uiBlockTouchUntil = 0;
 
-  const container = scene.add
-    .container(x, y)
-    .setDepth(4000)
-    .setScrollFactor(0);
+function createTopRightCircleButton(scene, x, y, radius, label, onClick) {
+  const size = radius * 2 + 18;
 
   const bg = scene.add
-    .circle(0, 0, r, 0x151924, 0.94)
-    .setStrokeStyle(Math.max(1, Math.round(2 * uiScale)), 0xaad8ff, 0.45);
+    .circle(x, y, radius, 0x151924, 0.96)
+    .setStrokeStyle(2, 0xaad8ff, 0.55)
+    .setDepth(20000)
+    .setScrollFactor(0);
 
   const text = scene.add
-    .text(0, 0, "⚙", {
+    .text(x, y, label, {
       fontFamily: "Arial, sans-serif",
-      fontSize: `${Math.round(20 * uiScale)}px`,
+      fontSize: `${Math.round(radius * 0.95)}px`,
       color: "#ffffff",
     })
-    .setOrigin(0.5);
+    .setOrigin(0.5)
+    .setDepth(20001)
+    .setScrollFactor(0);
 
   const hit = scene.add
-    .circle(0, 0, r + 6, 0xffffff, 0.001)
+    .rectangle(x, y, size, size, 0xffffff, 0.001)
+    .setDepth(20002)
+    .setScrollFactor(0)
     .setInteractive({ useHandCursor: !IS_TOUCH_DEVICE });
 
-  hit.on("pointerdown", () => {
-    openSceneSettings(scene, getSceneUiScale(scene));
+  const setNormal = () => {
+    bg.setFillStyle(0x151924, 0.96);
+    bg.setStrokeStyle(2, 0xaad8ff, 0.55);
+    bg.setScale(1);
+    text.setScale(1);
+  };
+
+  const setHover = () => {
+    bg.setFillStyle(0x20283a, 0.98);
+    bg.setStrokeStyle(2, 0xc6ecff, 0.8);
+    bg.setScale(1.04);
+    text.setScale(1.04);
+  };
+
+  const setPressed = () => {
+    bg.setScale(0.95);
+    text.setScale(0.95);
+  };
+
+  hit.on("pointerover", () => {
+    if (IS_TOUCH_DEVICE) return;
+    setHover();
   });
 
-  container.add([bg, text, hit]);
-  scene.settingsButton = container;
-  return container;
+  hit.on("pointerout", () => {
+    setNormal();
+  });
+
+  hit.on("pointerdown", (pointer) => {
+    pointer.event?.stopPropagation?.();
+    uiBlockTouchUntil = performance.now() + 250;
+    setPressed();
+  });
+
+  hit.on("pointerup", (pointer) => {
+    pointer.event?.stopPropagation?.();
+    setNormal();
+    onClick();
+  });
+
+  return {
+    bg,
+    text,
+    hit,
+    setPosition(nx, ny) {
+      bg.setPosition(nx, ny);
+      text.setPosition(nx, ny);
+      hit.setPosition(nx, ny);
+    },
+    destroy() {
+      hit.destroy();
+      text.destroy();
+      bg.destroy();
+    },
+  };
 }
 
-function updateSceneSettingsButtonPosition(scene, uiScale = 1) {
-  if (!scene.settingsButton) return;
+function createSceneTopButtons(scene, uiScale = 1) {
   const { width } = scene.scale;
-  scene.settingsButton.setPosition(
-    width - Math.round(34 * uiScale),
-    Math.round(34 * uiScale)
+  const r = Math.round(22 * uiScale);
+  const topY = Math.round(38 * uiScale);
+  const rightX = width - Math.round(38 * uiScale);
+  const gap = Math.round(62 * uiScale);
+
+  const inventoryBtn = createTopRightCircleButton(
+    scene,
+    rightX - gap,
+    topY,
+    r,
+    "🎒",
+    () => {
+      if (scene.invRoot?.__inv) {
+        scene.invRoot.__inv.toggle();
+      }
+    }
   );
+
+  const settingsBtn = createTopRightCircleButton(
+    scene,
+    rightX,
+    topY,
+    r,
+    "⚙",
+    () => {
+      openSceneSettings(scene, getSceneUiScale(scene));
+    }
+  );
+
+  scene.inventoryButton = inventoryBtn;
+  scene.settingsButton = settingsBtn;
+
+  scene.events.once("shutdown", () => {
+    scene.inventoryButton?.destroy?.();
+    scene.settingsButton?.destroy?.();
+    scene.inventoryButton = null;
+    scene.settingsButton = null;
+  });
+}
+
+function updateSceneTopButtonsPosition(scene, uiScale = 1) {
+  if (!scene.inventoryButton || !scene.settingsButton) return;
+
+  const { width } = scene.scale;
+  const topY = Math.round(38 * uiScale);
+  const rightX = width - Math.round(38 * uiScale);
+  const gap = Math.round(62 * uiScale);
+
+  scene.inventoryButton.setPosition(rightX - gap, topY);
+  scene.settingsButton.setPosition(rightX, topY);
 }
 
 // ----------------------
@@ -709,17 +824,24 @@ function ensureInventoryDom({
   root = document.createElement("div");
   root.id = "invRoot";
   root.innerHTML = `
-    <div id="invPanel">
-      <div id="invHandle"></div>
+    <div id="invBackdrop" class="inv-hidden"></div>
 
-      <div id="invHeader">
-        <div id="invTitle">Inventar</div>
-        <button id="invSyncBtn" title="NFT Sync">Sync</button>
+    <div id="invWindow" class="inv-hidden">
+      <div id="invWindowHeader">
+        <div>
+          <div id="invWindowTitle">Inventar</div>
+          <div id="invWindowSub">Critter und Accessoires</div>
+        </div>
+        <button id="invCloseBtn" title="Schließen">✕</button>
       </div>
 
       <div id="invTabs">
         <button id="tabCritter" class="tab active">Critter</button>
         <button id="tabAcc" class="tab">Accessoires</button>
+      </div>
+
+      <div id="invToolbar">
+        <button id="invSyncBtn" title="NFT Sync">Sync</button>
       </div>
 
       <div id="invContent"></div>
@@ -731,232 +853,269 @@ function ensureInventoryDom({
   style.textContent = `
     #invRoot {
       position: fixed;
-      right: 12px;
-      bottom: max(12px, env(safe-area-inset-bottom));
-      z-index: 99999;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      inset: 0;
+      z-index: 120000;
+      pointer-events: none;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    #invBackdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.58);
+      backdrop-filter: blur(6px);
       pointer-events: auto;
     }
 
-    #invPanel {
-      width: 340px;
-      height: 460px;
-      background: rgba(11,11,15,0.90);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 16px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-      transform: translateY(396px);
-      transition: transform 180ms ease;
+    #invWindow {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(920px, calc(100vw - 28px));
+      height: min(700px, calc(100vh - 28px));
+      background:
+        linear-gradient(180deg, rgba(22,27,40,0.98), rgba(12,15,24,0.98));
+      border: 1px solid rgba(170,216,255,0.22);
+      border-radius: 22px;
+      box-shadow:
+        0 24px 70px rgba(0,0,0,0.48),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
-      touch-action: none;
-      backdrop-filter: blur(8px);
+      pointer-events: auto;
     }
 
-    #invPanel.open { transform: translateY(0px); }
+    .inv-hidden {
+      display: none !important;
+    }
 
-    #invHandle {
-      height: 28px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
+    #invWindowHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px 14px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+    }
+
+    #invWindowTitle {
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+    }
+
+    #invWindowSub {
+      color: rgba(255,255,255,0.68);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+
+    #invCloseBtn {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+      font-size: 18px;
       cursor: pointer;
     }
 
-    #invHandle::before {
-      content:"";
-      width:56px;
-      height:5px;
-      border-radius:999px;
-      background: rgba(255,255,255,0.22);
+    #invCloseBtn:hover {
+      background: rgba(255,255,255,0.12);
     }
 
-    #invHeader {
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      padding: 0 10px 10px 10px;
+    #invTabs {
+      display: flex;
+      gap: 10px;
+      padding: 16px 20px 10px 20px;
     }
 
-    #invTitle {
-      color: rgba(255,255,255,0.92);
-      font-weight: 700;
+    #invTabs .tab {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.9);
+      padding: 12px 18px;
+      border-radius: 14px;
       font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      min-width: 140px;
+    }
+
+    #invTabs .tab.active {
+      background: linear-gradient(180deg, rgba(127,212,255,0.22), rgba(127,212,255,0.10));
+      border-color: rgba(170,216,255,0.35);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+
+    #invToolbar {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0 20px 12px 20px;
     }
 
     #invSyncBtn {
       border: 1px solid rgba(255,255,255,0.12);
       background: rgba(255,255,255,0.06);
       color: rgba(255,255,255,0.92);
-      padding: 8px 10px;
+      padding: 10px 14px;
       border-radius: 12px;
       font-size: 13px;
+      font-weight: 700;
       cursor: pointer;
     }
 
     #invSyncBtn:disabled {
-      opacity: 0.5;
+      opacity: 0.45;
       cursor: default;
     }
 
-    #invTabs {
-      display:flex;
-      gap:8px;
-      padding: 0 10px 10px 10px;
-    }
-
-    #invTabs .tab {
-      flex:1;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.06);
-      color: rgba(255,255,255,0.92);
-      padding: 10px 8px;
-      border-radius: 12px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    #invTabs .tab.active {
-      background: rgba(255,255,255,0.14);
-      border-color: rgba(255,255,255,0.22);
-    }
-
     #invContent {
-      padding: 0 10px 12px 10px;
-      overflow:auto;
+      flex: 1;
+      overflow: auto;
+      padding: 0 20px 20px 20px;
       -webkit-overflow-scrolling: touch;
     }
 
     .grid {
-      display:grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 14px;
     }
 
     .item {
       position: relative;
       border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.05);
-      border-radius: 14px;
-      padding: 10px;
-      color: rgba(255,255,255,0.90);
-      text-align:center;
-      user-select:none;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+      border-radius: 18px;
+      padding: 14px 12px;
+      color: rgba(255,255,255,0.92);
+      text-align: center;
+      user-select: none;
       cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+      min-height: 170px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .item:hover {
+      transform: translateY(-2px);
+      border-color: rgba(170,216,255,0.28);
+      background:
+        linear-gradient(180deg, rgba(127,212,255,0.12), rgba(255,255,255,0.04));
     }
 
     .item.selected {
-      border-color: rgba(255,255,255,0.55);
-      background: rgba(255,255,255,0.10);
+      border-color: rgba(170,216,255,0.62);
+      background:
+        linear-gradient(180deg, rgba(127,212,255,0.18), rgba(255,255,255,0.06));
+      box-shadow: 0 0 0 1px rgba(170,216,255,0.12) inset;
     }
 
     .item.locked {
-      opacity: 0.4;
-      filter: grayscale(0.25);
+      opacity: 0.42;
+      filter: grayscale(0.35);
     }
 
     .item img {
-      width: 56px;
-      height: 56px;
+      width: 72px;
+      height: 72px;
       object-fit: contain;
-      display:block;
-      margin: 0 auto 8px auto;
+      display: block;
+      margin: 0 auto 10px auto;
+      image-rendering: auto;
       pointer-events: none;
     }
 
     .item .label {
-      font-size: 13px;
-      font-weight: 700;
+      font-size: 14px;
+      font-weight: 800;
     }
 
     .item .id {
       font-size: 12px;
-      opacity: 0.75;
+      opacity: 0.72;
       margin-top: 6px;
     }
 
     .lockBadge {
       position: absolute;
-      top: 8px;
-      right: 8px;
-      font-size: 12px;
+      top: 10px;
+      right: 10px;
+      font-size: 11px;
+      font-weight: 800;
       background: rgba(0,0,0,0.45);
       border: 1px solid rgba(255,255,255,0.15);
-      padding: 3px 6px;
+      padding: 4px 7px;
       border-radius: 999px;
     }
 
     .hint {
       font-size: 12px;
-      opacity: 0.75;
-      margin-top: 10px;
-      line-height: 1.25;
+      opacity: 0.72;
+      margin-top: 14px;
+      line-height: 1.35;
+      color: rgba(255,255,255,0.82);
     }
 
-    @media (max-width: 720px) {
-      #invRoot {
-        right: 8px;
-        left: 8px;
-        bottom: max(8px, env(safe-area-inset-bottom));
+    @media (max-width: 700px) {
+      #invWindow {
+        width: calc(100vw - 16px);
+        height: calc(100vh - 16px);
+        border-radius: 18px;
       }
 
-      #invPanel {
-        width: min(100%, 420px);
-        height: min(58vh, 430px);
-        margin-left: auto;
-        transform: translateY(calc(min(58vh, 430px) - 54px));
+      #invWindowTitle {
+        font-size: 20px;
       }
 
-      #invHandle {
-        height: 30px;
+      #invTabs .tab {
+        min-width: 0;
+        flex: 1;
       }
 
       .grid {
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
       }
 
       .item {
-        padding: 8px;
-        border-radius: 12px;
+        min-height: 150px;
+        padding: 12px 10px;
       }
 
       .item img {
-        width: 46px;
-        height: 46px;
-        margin-bottom: 6px;
-      }
-
-      .item .label {
-        font-size: 12px;
-      }
-
-      .item .id,
-      .hint,
-      #invTitle,
-      #invSyncBtn,
-      #invTabs .tab {
-        font-size: 12px;
+        width: 60px;
+        height: 60px;
       }
     }
   `;
   document.head.appendChild(style);
 
-  const panel = root.querySelector("#invPanel");
-  const handle = root.querySelector("#invHandle");
+  const backdrop = root.querySelector("#invBackdrop");
+  const win = root.querySelector("#invWindow");
+  const closeBtn = root.querySelector("#invCloseBtn");
   const tabCritter = root.querySelector("#tabCritter");
   const tabAcc = root.querySelector("#tabAcc");
   const content = root.querySelector("#invContent");
   const syncBtn = root.querySelector("#invSyncBtn");
 
-  let open = false;
   let activeTab = "critter";
   let currentProfile = null;
+  let open = false;
 
   function setOpen(v) {
-    open = v;
-    panel.classList.toggle("open", open);
+    open = !!v;
+    backdrop.classList.toggle("inv-hidden", !open);
+    win.classList.toggle("inv-hidden", !open);
+    document.body.style.overflow = open ? "hidden" : "";
   }
 
   function setTab(t) {
@@ -973,7 +1132,7 @@ function ensureInventoryDom({
       currentProfile.wallet.length > 0;
 
     syncBtn.disabled = !hasWallet;
-    syncBtn.textContent = hasWallet ? "Sync" : "Wallet?";
+    syncBtn.textContent = hasWallet ? "NFT Sync" : "Wallet fehlt";
 
     if (activeTab === "critter") {
       const selected = currentProfile.selectedCritterId;
@@ -993,12 +1152,14 @@ function ensureInventoryDom({
                 ${!isOwned ? `<div class="lockBadge">NFT</div>` : ""}
                 <img src="${imgSrc}" alt="${c.name}" />
                 <div class="label">${c.name}</div>
-                <div class="id">${c.nftNumber}</div>
+                <div class="id">#${c.nftNumber}</div>
               </div>
             `;
           }).join("")}
         </div>
-        <div class="hint">Alle Critter sind sichtbar. Nutzbar sind nur freigeschaltete Critter aus <code>ownedCritterIds</code>.</div>
+        <div class="hint">
+          Sichtbar sind alle Critter. Spielbar sind nur Critter aus <code>ownedCritterIds</code>.
+        </div>
       `;
 
       content.querySelectorAll(".item").forEach((el) => {
@@ -1022,13 +1183,15 @@ function ensureInventoryDom({
               return `
                 <div class="item ${val ? "selected" : ""}" data-slot="${slot}">
                   <div class="label">${slot.toUpperCase()}</div>
-                  <div class="id">${val ?? "none"}</div>
+                  <div class="id">${val ?? "leer"}</div>
                 </div>
               `;
             })
             .join("")}
         </div>
-        <div class="hint">Accessoires bleiben erstmal Platzhalter.</div>
+        <div class="hint">
+          Accessoires sind aktuell noch Platzhalter.
+        </div>
       `;
 
       content.querySelectorAll(".item").forEach((el) => {
@@ -1042,7 +1205,8 @@ function ensureInventoryDom({
     }
   }
 
-  handle.addEventListener("pointerdown", () => setOpen(!open));
+  backdrop.addEventListener("click", () => setOpen(false));
+  closeBtn.addEventListener("click", () => setOpen(false));
 
   tabCritter.addEventListener("click", () => {
     setTab("critter");
@@ -1056,6 +1220,7 @@ function ensureInventoryDom({
 
   syncBtn.addEventListener("click", async () => {
     if (!currentProfile) return;
+
     const hasWallet =
       typeof currentProfile.wallet === "string" &&
       currentProfile.wallet.length > 0;
@@ -1063,12 +1228,12 @@ function ensureInventoryDom({
     if (!hasWallet) return;
 
     syncBtn.disabled = true;
-    syncBtn.textContent = "Sync...";
+    syncBtn.textContent = "Sync läuft...";
     try {
       await onRefreshOwnership();
     } finally {
-      syncBtn.textContent = "Sync";
       syncBtn.disabled = false;
+      syncBtn.textContent = "NFT Sync";
     }
   });
 
@@ -1077,8 +1242,19 @@ function ensureInventoryDom({
       currentProfile = p;
       render();
     },
-    setOpen,
-    setTab,
+    open() {
+      setOpen(true);
+    },
+    close() {
+      setOpen(false);
+    },
+    toggle() {
+      setOpen(!open);
+    },
+    setTab(t) {
+      setTab(t);
+      render();
+    },
   };
 
   setOpen(false);
@@ -1089,7 +1265,22 @@ function ensureInventoryDom({
 // ----------------------
 // HUD
 // ----------------------
+const hud = document.getElementById("hud");
 const hudLine = document.getElementById("hudLine");
+
+if (hud) {
+  hud.style.pointerEvents = "none";
+  hud.style.userSelect = "none";
+  hud.style.zIndex = "20";
+  hud.style.left = "12px";
+  hud.style.top = "12px";
+  hud.style.right = "auto";
+}
+
+if (hudLine) {
+  hudLine.style.pointerEvents = "none";
+  hudLine.style.userSelect = "none";
+}
 
 function updateHud(extra = "") {
   if (!hudLine) return;
@@ -1213,6 +1404,11 @@ function bindSceneTouchMovement(scene) {
   const onDown = (pointer) => {
     if (!isTouchLikePointer(pointer)) return;
     if (touchMoveActive) return;
+    if (performance.now() < uiBlockTouchUntil) return;
+
+    if (pointer.event?.target instanceof HTMLCanvasElement === false) return;
+    
+    if (pointer.downElement && pointer.downElement !== scene.game.canvas) return;
 
     touchMoveActive = true;
     touchMovePointerId = pointer.id;
@@ -1676,11 +1872,8 @@ class MenuScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor("#0b0b0f");
 
-    this.bg = this.add
-      .image(0, 0, "menu_bg")
-      .setOrigin(0, 0)
-      .setDisplaySize(layout.width, layout.width * (this.textures.get("menu_bg").getSourceImage().height / this.textures.get("menu_bg").getSourceImage().width))
-      .setDepth(-100);
+    this.bg = this.add.image(0, 0, "menu_bg").setOrigin(0, 0).setDepth(-100);
+    this.bg.setDisplaySize(layout.width, layout.height);
 
     this.overlay = this.add
       .rectangle(
@@ -1942,6 +2135,8 @@ class MainScene extends Phaser.Scene {
     this.settingsOverlay = null;
     this.settingsJustClosedUntil = 0;
     this.settingsButton = null;
+    this.inventoryButton = null;
+    this.topButtons = null;
   }
 
   preload() {
@@ -1952,10 +2147,8 @@ class MainScene extends Phaser.Scene {
     this.load.tilemapTiledJSON("evoMap", "/maps/evolucia.json");
     this.load.image("evoBg", "/maps/background_v2.png");
 
-    // Foreground immer laden, damit Occlusion auch auf Mobile funktioniert
     this.load.image("evoFg", "/maps/foreground_v2.png");
 
-    // Partikel kannst du auf Mobile weiter auslassen, wenn du willst
     if (!MOBILE_LIGHT_MODE) {
       this.load.image("spore", "/effects/spore.png");
     }
@@ -2001,6 +2194,9 @@ class MainScene extends Phaser.Scene {
 
   create(data) {
     console.log("MAIN CREATE START", data);
+
+    this.isTransitioning = false;
+    this.triggerCooldownUntil = 0;
 
     this.cameras.main.roundPixels = false;
     this.cameras.main.setBackgroundColor("#111122");
@@ -2118,7 +2314,6 @@ class MainScene extends Phaser.Scene {
     this.player.setDepth(100);
     this.player.setFlipX(false);
 
-    // Foreground immer anzeigen, wenn Textur vorhanden ist
     if (this.textures.exists("evoFg")) {
       this.foreground = this.add
         .image(0, 0, "evoFg")
@@ -2132,8 +2327,6 @@ class MainScene extends Phaser.Scene {
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys("W,A,S,D");
-
-    createSceneSettingsButton(this, getSceneUiScale(this));
 
     this.invRoot = ensureInventoryDom({
       onSelectCritter: (id) => {
@@ -2161,6 +2354,7 @@ class MainScene extends Phaser.Scene {
             body: null,
             aura: null,
           };
+
         profile.equippedAccessories[slot] = accessoryIdOrNull;
 
         apiSave({
@@ -2191,6 +2385,8 @@ class MainScene extends Phaser.Scene {
     });
 
     this.invRoot.__inv.setProfile(profile);
+
+    createSceneTopButtons(this, getSceneUiScale(this));
 
     profile.x = startX;
     profile.y = startY;
@@ -2233,11 +2429,12 @@ class MainScene extends Phaser.Scene {
     this.scale.on("resize", this.onResize, this);
     this.events.once("shutdown", () => {
       this.scale.off("resize", this.onResize, this);
+      saveCurrentPlayerState(this);
     });
   }
 
   onResize() {
-    updateSceneSettingsButtonPosition(this, getSceneUiScale(this));
+    updateSceneTopButtonsPosition(this, getSceneUiScale(this));
     if (this.settingsOverlay) {
       closeSceneSettings(this);
     }
@@ -2301,6 +2498,18 @@ class MainScene extends Phaser.Scene {
           this.triggerCooldownUntil = time + 1200;
           this.player.setVelocity(0, 0);
 
+          profile.x = this.player.x;
+          profile.y = this.player.y;
+
+          apiSave({
+            xp: profile.xp,
+            level: profile.level,
+            selectedCritterId: profile.selectedCritterId,
+            x: profile.x,
+            y: profile.y,
+            equippedAccessories: profile.equippedAccessories,
+          });
+
           this.cameras.main.fadeOut(400, 0, 0, 0);
 
           this.time.delayedCall(420, () => {
@@ -2357,10 +2566,16 @@ class DungeonScene extends Phaser.Scene {
     this.settingsOverlay = null;
     this.settingsJustClosedUntil = 0;
     this.settingsButton = null;
+    this.inventoryButton = null;
+    this.topButtons = null;
+    this.invRoot = null;
   }
 
   create(data) {
     console.log("DUNGEON CREATE START", data);
+
+    this.isTransitioning = false;
+    this.triggerCooldownUntil = 0;
 
     this.cameras.main.roundPixels = false;
     this.cameras.main.setBackgroundColor("#111122");
@@ -2473,18 +2688,75 @@ class DungeonScene extends Phaser.Scene {
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys("W,A,S,D");
 
-    createSceneSettingsButton(this, getSceneUiScale(this));
+    this.invRoot = ensureInventoryDom({
+      onSelectCritter: (id) => {
+        if (!profile.ownedCritterIds.includes(id)) return;
+
+        profile.selectedCritterId = id;
+        this.player.setTexture(getCritterIdleTexture(id));
+
+        apiSave({
+          xp: profile.xp,
+          level: profile.level,
+          selectedCritterId: profile.selectedCritterId,
+          x: this.player.x,
+          y: this.player.y,
+          equippedAccessories: profile.equippedAccessories,
+        });
+
+        this.invRoot.__inv.setProfile(profile);
+      },
+
+      onEquipAccessory: (slot, accessoryIdOrNull) => {
+        profile.equippedAccessories =
+          profile.equippedAccessories ?? {
+            head: null,
+            body: null,
+            aura: null,
+          };
+
+        profile.equippedAccessories[slot] = accessoryIdOrNull;
+
+        apiSave({
+          xp: profile.xp,
+          level: profile.level,
+          selectedCritterId: profile.selectedCritterId,
+          x: this.player.x,
+          y: this.player.y,
+          equippedAccessories: profile.equippedAccessories,
+        });
+
+        this.invRoot.__inv.setProfile(profile);
+      },
+
+      onRefreshOwnership: async () => {
+        try {
+          await apiOwnershipRefresh();
+          profile = normalizeProfile(await apiGetMe());
+          this.player.setTexture(getCritterIdleTexture(profile.selectedCritterId));
+          this.invRoot.__inv.setProfile(profile);
+          updateHud("Dungeon");
+        } catch (err) {
+          console.error("ownership refresh failed:", err);
+        }
+      },
+    });
+
+    this.invRoot.__inv.setProfile(profile);
+
+    createSceneTopButtons(this, getSceneUiScale(this));
 
     updateHud("Dungeon");
 
     this.scale.on("resize", this.onResize, this);
     this.events.once("shutdown", () => {
       this.scale.off("resize", this.onResize, this);
+      saveCurrentPlayerState(this);
     });
   }
 
   onResize() {
-    updateSceneSettingsButtonPosition(this, getSceneUiScale(this));
+    updateSceneTopButtonsPosition(this, getSceneUiScale(this));
     if (this.settingsOverlay) {
       closeSceneSettings(this);
     }
