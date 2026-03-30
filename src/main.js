@@ -1069,6 +1069,9 @@ class MenuScene extends Phaser.Scene {
   create() {
     const layout = this.getMenuLayout();
 
+    this.isStartingGame = false;
+    this.isTransitioning = false;
+
     topButtonsApi.ensureTopButtonsDom().__topButtons.hide();
     this.isTransitioning = false;
 
