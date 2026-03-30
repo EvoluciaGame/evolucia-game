@@ -13,8 +13,8 @@ export function createTopButtons() {
       root = document.createElement("div");
       root.id = "sceneTopButtons";
       root.innerHTML = `
-        <button id="sceneInventoryBtn" class="scene-top-btn" title="Inventar">🎒</button>
-        <button id="sceneSettingsBtn" class="scene-top-btn" title="Settings">⚙</button>
+        <button id="sceneInventoryBtn" class="scene-top-btn" title="Inventar" type="button">🎒</button>
+        <button id="sceneSettingsBtn" class="scene-top-btn" title="Settings" type="button">⚙</button>
       `;
       document.body.appendChild(root);
     }
@@ -24,8 +24,8 @@ export function createTopButtons() {
     style.textContent = `
       #sceneTopButtons {
         position: fixed !important;
-        top: max(12px, env(safe-area-inset-top)) !important;
-        right: max(12px, env(safe-area-inset-right)) !important;
+        top: max(12px, env(safe-area-inset-top, 0px)) !important;
+        right: max(12px, env(safe-area-inset-right, 0px)) !important;
         left: auto !important;
         bottom: auto !important;
         transform: none !important;
@@ -33,9 +33,9 @@ export function createTopButtons() {
         display: flex;
         flex-direction: row;
         gap: 10px;
-        pointer-events: auto;
-        margin: 0;
-        padding: 0;
+        pointer-events: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
 
       .scene-top-btn {
@@ -58,6 +58,7 @@ export function createTopButtons() {
         touch-action: manipulation;
         user-select: none;
         position: relative;
+        pointer-events: auto !important;
       }
 
       .scene-top-btn:hover {
@@ -72,8 +73,8 @@ export function createTopButtons() {
 
       @media (max-width: 700px) {
         #sceneTopButtons {
-          top: max(10px, env(safe-area-inset-top)) !important;
-          right: max(10px, env(safe-area-inset-right)) !important;
+          top: max(10px, env(safe-area-inset-top, 0px)) !important;
+          right: max(10px, env(safe-area-inset-right, 0px)) !important;
           gap: 8px;
         }
 
@@ -89,15 +90,13 @@ export function createTopButtons() {
     const invBtn = root.querySelector("#sceneInventoryBtn");
     const settingsBtn = root.querySelector("#sceneSettingsBtn");
 
-    invBtn.addEventListener("pointerdown", (e) => {
+    const blockTouch = (e) => {
       e.stopPropagation();
       uiBlockTouchUntil = performance.now() + 250;
-    });
+    };
 
-    settingsBtn.addEventListener("pointerdown", (e) => {
-      e.stopPropagation();
-      uiBlockTouchUntil = performance.now() + 250;
-    });
+    invBtn.addEventListener("pointerdown", blockTouch);
+    settingsBtn.addEventListener("pointerdown", blockTouch);
 
     root.__topButtons = {
       bindHandlers({ onInventory, onSettings }) {
@@ -118,15 +117,20 @@ export function createTopButtons() {
 
       setScene(scene) {
         activeScene = scene;
+
         root.style.display = "flex";
+        root.style.position = "fixed";
+        root.style.top = "max(12px, env(safe-area-inset-top, 0px))";
+        root.style.right = "max(12px, env(safe-area-inset-right, 0px))";
+        root.style.left = "auto";
+        root.style.bottom = "auto";
+        root.style.transform = "none";
+        root.style.zIndex = "125000";
+        root.style.pointerEvents = "auto";
       },
 
       hide() {
-        if (activeScene === scene) {
-          activeScene = null;
-        } else {
-          activeScene = null;
-        }
+        activeScene = null;
         root.style.display = "none";
       },
 

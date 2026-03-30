@@ -1,4 +1,7 @@
 import Phaser from "phaser";
+import { createGamePanel } from "./gamePanel";
+import { createTopButtons } from "./topButtons";
+import { loadSettings, saveSettings as persistSettings } from "./settings";
 
 function getViewportSize() {
   const vv = window.visualViewport;
@@ -66,53 +69,11 @@ const IS_TOUCH_DEVICE =
 const MOBILE_LIGHT_MODE = false;
 const GAME_RENDERER_TYPE = Phaser.AUTO;
 
-// Settings
-const SETTINGS_STORAGE_KEY = "evolucia_settings";
-
-const defaultSettings = {
-  musicEnabled: true,
-  musicVolume: 0.4,
-  sfxEnabled: true,
-  sfxVolume: 0.7,
-};
-
-function loadSettings() {
-  try {
-    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (!raw) return { ...defaultSettings };
-
-    const parsed = JSON.parse(raw);
-
-    return {
-      musicEnabled:
-        typeof parsed.musicEnabled === "boolean"
-          ? parsed.musicEnabled
-          : defaultSettings.musicEnabled,
-
-      musicVolume:
-        typeof parsed.musicVolume === "number"
-          ? Math.max(0, Math.min(1, parsed.musicVolume))
-          : defaultSettings.musicVolume,
-
-      sfxEnabled:
-        typeof parsed.sfxEnabled === "boolean"
-          ? parsed.sfxEnabled
-          : defaultSettings.sfxEnabled,
-
-      sfxVolume:
-        typeof parsed.sfxVolume === "number"
-          ? Math.max(0, Math.min(1, parsed.sfxVolume))
-          : defaultSettings.sfxVolume,
-    };
-  } catch {
-    return { ...defaultSettings };
-  }
-}
-
 let settings = loadSettings();
 
-function saveSettings() {
-  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+function saveSettings(nextSettings = settings) {
+  settings = { ...nextSettings };
+  persistSettings(settings);
 }
 
 // ----------------------
@@ -463,410 +424,10 @@ function applyGlobalMusicSettings(game) {
   }
 }
 
-// ----------------------
-// Shared settings popup (DOM like inventory)
-// ----------------------
-function ensureSettingsDom() {
-  let root = document.getElementById("settingsRoot");
-  if (root) return root;
-
-  root = document.createElement("div");
-  root.id = "settingsRoot";
-  root.innerHTML = `
-    <div id="settingsBackdrop" class="settings-hidden"></div>
-
-    <div id="settingsWindow" class="settings-hidden">
-      <div id="settingsWindowHeader">
-        <div>
-          <div id="settingsWindowTitle">Settings</div>
-          <div id="settingsWindowSub">Audio und Spieloptionen</div>
-        </div>
-        <button id="settingsCloseBtn" title="Schließen">✕</button>
-      </div>
-
-      <div id="settingsContent">
-        <div class="settingsRow">
-          <div class="settingsLabelWrap">
-            <div class="settingsLabel">Musik</div>
-            <div class="settingsSubLabel">Hintergrundmusik an oder aus</div>
-          </div>
-          <button id="settingsMusicToggle" class="settingsActionBtn">AN</button>
-        </div>
-
-        <div class="settingsRow">
-          <div class="settingsLabelWrap">
-            <div class="settingsLabel">Lautstärke</div>
-            <div class="settingsSubLabel">Globale Musiklautstärke</div>
-          </div>
-          <div class="settingsVolumeWrap">
-            <button id="settingsMinusBtn" class="settingsIconBtn">−</button>
-            <div id="settingsVolumeValue">40%</div>
-            <button id="settingsPlusBtn" class="settingsIconBtn">+</button>
-          </div>
-        </div>
-
-        <div class="settingsRow">
-          <div class="settingsLabelWrap">
-            <div class="settingsLabel">Navigation</div>
-            <div class="settingsSubLabel">Zurück ins Hauptmenü wechseln</div>
-          </div>
-          <button id="settingsBackToMenuBtn" class="settingsDangerBtn">Back to Menu</button>
-        </div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(root);
-
-  const style = document.createElement("style");
-  style.textContent = `
-    #settingsRoot {
-      position: fixed;
-      inset: 0;
-      z-index: 130000;
-      pointer-events: none;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    }
-
-    #settingsBackdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.58);
-      backdrop-filter: blur(6px);
-      pointer-events: auto;
-    }
-
-    #settingsWindow {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: min(920px, calc(100vw - 28px));
-      max-width: calc(100vw - 28px);
-      min-height: 360px;
-      background:
-        linear-gradient(180deg, rgba(22,27,40,0.98), rgba(12,15,24,0.98));
-      border: 1px solid rgba(170,216,255,0.22);
-      border-radius: 22px;
-      box-shadow:
-        0 24px 70px rgba(0,0,0,0.48),
-        inset 0 1px 0 rgba(255,255,255,0.04);
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      pointer-events: auto;
-    }
-
-    .settings-hidden {
-      display: none !important;
-    }
-
-    #settingsWindowHeader {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 18px 20px 14px 20px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
-    }
-
-    #settingsWindowTitle {
-      color: #ffffff;
-      font-size: 24px;
-      font-weight: 800;
-      letter-spacing: 0.3px;
-    }
-
-    #settingsWindowSub {
-      color: rgba(255,255,255,0.68);
-      font-size: 13px;
-      margin-top: 4px;
-    }
-
-    #settingsCloseBtn {
-      width: 42px;
-      height: 42px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: rgba(255,255,255,0.06);
-      color: #fff;
-      font-size: 18px;
-      cursor: pointer;
-    }
-
-    #settingsCloseBtn:hover {
-      background: rgba(255,255,255,0.12);
-    }
-
-    #settingsContent {
-      padding: 18px 20px 22px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      flex: 1;
-      overflow: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .settingsRow {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      border: 1px solid rgba(255,255,255,0.10);
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
-      border-radius: 18px;
-      padding: 18px 16px;
-    }
-
-    .settingsLabelWrap {
-      min-width: 0;
-      flex: 1;
-    }
-
-    .settingsLabel {
-      color: rgba(255,255,255,0.96);
-      font-size: 16px;
-      font-weight: 800;
-      letter-spacing: 0.2px;
-    }
-
-    .settingsSubLabel {
-      color: rgba(255,255,255,0.66);
-      font-size: 13px;
-      margin-top: 5px;
-      line-height: 1.35;
-    }
-
-    .settingsActionBtn,
-    .settingsIconBtn,
-    .settingsDangerBtn {
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.06);
-      color: rgba(255,255,255,0.94);
-      border-radius: 14px;
-      cursor: pointer;
-      font-weight: 800;
-    }
-
-    .settingsActionBtn,
-    .settingsDangerBtn {
-      min-width: 120px;
-      padding: 12px 16px;
-      font-size: 14px;
-    }
-
-    .settingsActionBtn:hover,
-    .settingsIconBtn:hover,
-    .settingsDangerBtn:hover {
-      background: rgba(255,255,255,0.12);
-    }
-
-    .settingsDangerBtn {
-      background: rgba(170, 40, 40, 0.22);
-      border-color: rgba(255, 120, 120, 0.28);
-    }
-
-    .settingsDangerBtn:hover {
-      background: rgba(170, 40, 40, 0.34);
-      border-color: rgba(255, 150, 150, 0.42);
-    }
-
-    .settingsVolumeWrap {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-shrink: 0;
-    }
-
-    .settingsIconBtn {
-      width: 42px;
-      height: 42px;
-      font-size: 22px;
-      line-height: 1;
-    }
-
-    #settingsVolumeValue {
-      min-width: 70px;
-      text-align: center;
-      color: #ffffff;
-      font-size: 16px;
-      font-weight: 800;
-    }
-
-    @media (max-width: 700px) {
-      #settingsWindow {
-        width: calc(100vw - 16px);
-        border-radius: 18px;
-      }
-
-      #settingsWindowTitle {
-        font-size: 20px;
-      }
-
-      #settingsContent {
-        padding: 14px;
-      }
-
-      .settingsRow {
-        align-items: stretch;
-        flex-direction: column;
-      }
-
-      .settingsActionBtn,
-      .settingsDangerBtn {
-        width: 100%;
-      }
-
-      .settingsVolumeWrap {
-        width: 100%;
-        justify-content: space-between;
-      }
-
-      .settingsIconBtn {
-        width: 48px;
-        height: 48px;
-      }
-
-      #settingsVolumeValue {
-        flex: 1;
-      }
-    }
-  `;
-  document.head.appendChild(style);
-
-  const backdrop = root.querySelector("#settingsBackdrop");
-  const win = root.querySelector("#settingsWindow");
-  const closeBtn = root.querySelector("#settingsCloseBtn");
-  const musicToggle = root.querySelector("#settingsMusicToggle");
-  const minusBtn = root.querySelector("#settingsMinusBtn");
-  const plusBtn = root.querySelector("#settingsPlusBtn");
-  const volumeValue = root.querySelector("#settingsVolumeValue");
-  const backToMenuBtn = root.querySelector("#settingsBackToMenuBtn");
-
-  let open = false;
-  let activeScene = null;
-
-  function refreshUi() {
-    musicToggle.textContent = settings.musicEnabled ? "AN" : "AUS";
-    volumeValue.textContent = `${Math.round(settings.musicVolume * 100)}%`;
-
-    const isMenu = activeScene?.scene?.key === "menu";
-    backToMenuBtn.disabled = !!isMenu;
-    backToMenuBtn.textContent = isMenu ? "Bereits im Menü" : "Back to Menu";
-    backToMenuBtn.style.opacity = isMenu ? "0.5" : "1";
-    backToMenuBtn.style.cursor = isMenu ? "default" : "pointer";
-  }
-
-  function setOpen(v) {
-    open = !!v;
-    backdrop.classList.toggle("settings-hidden", !open);
-    win.classList.toggle("settings-hidden", !open);
-    document.body.style.overflow = open ? "hidden" : "";
-    refreshUi();
-  }
-
-  backdrop.addEventListener("click", () => {
-    setOpen(false);
-    if (activeScene) {
-      activeScene.settingsJustClosedUntil = activeScene.time.now + 250;
-    }
-  });
-
-  closeBtn.addEventListener("click", () => {
-    setOpen(false);
-    if (activeScene) {
-      activeScene.settingsJustClosedUntil = activeScene.time.now + 250;
-    }
-  });
-
-  musicToggle.addEventListener("click", () => {
-    settings.musicEnabled = !settings.musicEnabled;
-    saveSettings();
-    refreshUi();
-
-    if (activeScene) {
-      if (!settings.musicEnabled) {
-        stopAllKnownMusic(activeScene);
-      } else {
-        applyGlobalMusicSettings(activeScene.game);
-        const sceneKey = activeScene.scene.key;
-        if (sceneKey === "menu") ensureMenuMusic(activeScene);
-        if (sceneKey === "main") ensureOverworldMusic(activeScene);
-        if (sceneKey === "dungeon") ensureDungeonMusic(activeScene);
-      }
-    }
-  });
-
-  minusBtn.addEventListener("click", () => {
-    settings.musicVolume = Math.max(
-      0,
-      Math.round((settings.musicVolume - 0.1) * 10) / 10
-    );
-    saveSettings();
-    refreshUi();
-
-    if (activeScene?.game) {
-      applyGlobalMusicSettings(activeScene.game);
-    }
-  });
-
-  plusBtn.addEventListener("click", () => {
-    settings.musicVolume = Math.min(
-      1,
-      Math.round((settings.musicVolume + 0.1) * 10) / 10
-    );
-    saveSettings();
-    refreshUi();
-
-    if (activeScene?.game) {
-      applyGlobalMusicSettings(activeScene.game);
-    }
-  });
-
-  backToMenuBtn.addEventListener("click", () => {
-    if (!activeScene) return;
-    if (activeScene.scene.key === "menu") return;
-    switchSceneToMenu(activeScene);
-  });
-
-  root.__settings = {
-    open(scene) {
-      activeScene = scene;
-      setOpen(true);
-    },
-    close() {
-      setOpen(false);
-      if (activeScene) {
-        activeScene.settingsJustClosedUntil = activeScene.time.now + 250;
-      }
-    },
-    isOpen() {
-      return open;
-    },
-  };
-
-  setOpen(false);
-  refreshUi();
-  return root;
-}
-
-function closeSceneSettings(scene) {
-  const root = ensureSettingsDom();
-  root.__settings.close();
-}
-
-function openSceneSettings(scene) {
-  if (scene.time.now < (scene.settingsJustClosedUntil ?? 0)) return;
-  const root = ensureSettingsDom();
-  root.__settings.open(scene);
-}
-
 function switchSceneToMenu(scene) {
   if (!scene) return;
 
   scene.invRoot?.__inv?.close?.();
-  closeSceneSettings(scene);
   saveCurrentPlayerState(scene);
   stopAllKnownMusic(scene);
 
@@ -886,680 +447,20 @@ function switchSceneToMenu(scene) {
   }
 }
 
-// ----------------------
-// Top-right buttons (DOM fixed)
-// ----------------------
-let uiBlockTouchUntil = 0;
-
-function ensureSceneTopButtons() {
-  let root = document.getElementById("sceneTopButtons");
-  if (root) return root;
-
-  root = document.createElement("div");
-  root.id = "sceneTopButtons";
-  root.innerHTML = `
-    <button id="sceneInventoryBtn" class="scene-top-btn" title="Inventar">🎒</button>
-    <button id="sceneSettingsBtn" class="scene-top-btn" title="Settings">⚙</button>
-  `;
-  document.body.appendChild(root);
-
-  const style = document.createElement("style");
-  style.textContent = `
-    #sceneTopButtons {
-      position: fixed !important;
-      top: max(10px, env(safe-area-inset-top, 0px)) !important;
-      right: max(10px, env(safe-area-inset-right, 0px)) !important;
-      left: auto !important;
-      bottom: auto !important;
-      transform: none !important;
-      z-index: 125000 !important;
-      display: flex;
-      flex-direction: row;
-      gap: 10px;
-      pointer-events: auto !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-
-    .scene-top-btn {
-      width: 52px;
-      height: 52px;
-      border-radius: 999px;
-      border: 1px solid rgba(170,216,255,0.35);
-      background: rgba(21,25,36,0.96);
-      color: #ffffff;
-      font-size: 24px;
-      line-height: 1;
-      display: grid;
-      place-items: center;
-      cursor: pointer;
-      box-shadow:
-        0 10px 24px rgba(0,0,0,0.32),
-        inset 0 1px 0 rgba(255,255,255,0.04);
-      backdrop-filter: blur(8px);
-      -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
-      user-select: none;
-      position: relative;
-      pointer-events: auto !important;
-    }
-
-    .scene-top-btn:hover {
-      background: rgba(32,40,58,0.98);
-      border-color: rgba(198,236,255,0.72);
-      transform: translateY(-1px);
-    }
-
-    .scene-top-btn:active {
-      transform: scale(0.96);
-    }
-
-    @media (max-width: 700px) {
-      #sceneTopButtons {
-        top: max(8px, env(safe-area-inset-top, 0px)) !important;
-        right: max(8px, env(safe-area-inset-right, 0px)) !important;
-        gap: 8px;
-      }
-
-      .scene-top-btn {
-        width: 48px;
-        height: 48px;
-        font-size: 22px;
-      }
-    }
-  `;
-  document.head.appendChild(style);
-
-  let activeScene = null;
-
-  const invBtn = root.querySelector("#sceneInventoryBtn");
-  const settingsBtn = root.querySelector("#sceneSettingsBtn");
-
-  invBtn.addEventListener("pointerdown", (e) => {
-    e.stopPropagation();
-    uiBlockTouchUntil = performance.now() + 250;
-  });
-
-  settingsBtn.addEventListener("pointerdown", (e) => {
-    e.stopPropagation();
-    uiBlockTouchUntil = performance.now() + 250;
-  });
-
-  invBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    uiBlockTouchUntil = performance.now() + 250;
-    if (!activeScene?.invRoot?.__inv) return;
-    activeScene.invRoot.__inv.toggle();
-  });
-
-  settingsBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    uiBlockTouchUntil = performance.now() + 250;
-    if (!activeScene) return;
-    openSceneSettings(activeScene);
-  });
-
-  root.__topButtons = {
-    setScene(scene) {
-      activeScene = scene;
-      root.style.display = "flex";
-      root.style.position = "fixed";
-      root.style.top = "max(10px, env(safe-area-inset-top, 0px))";
-      root.style.right = "max(10px, env(safe-area-inset-right, 0px))";
-      root.style.left = "auto";
-      root.style.bottom = "auto";
-      root.style.transform = "none";
-      root.style.zIndex = "125000";
-      root.style.pointerEvents = "auto";
-    },
-    hide() {
-      root.style.display = "none";
-    },
-  };
-
-  root.style.display = "none";
-  return root;
-}
-
-function createSceneTopButtons(scene) {
-  const root = ensureSceneTopButtons();
-  root.__topButtons.setScene(scene);
-
-  scene.events.once("shutdown", () => {
-    if (root.__topButtons) {
-      root.__topButtons.hide();
-    }
-  });
-}
-
-function updateSceneTopButtonsPosition() {
-  const root = document.getElementById("sceneTopButtons");
-  if (!root) return;
-
-  root.style.position = "fixed";
-  root.style.top = "max(10px, env(safe-area-inset-top, 0px))";
-  root.style.right = "max(10px, env(safe-area-inset-right, 0px))";
-  root.style.left = "auto";
-  root.style.bottom = "auto";
-  root.style.transform = "none";
-  root.style.zIndex = "125000";
-}
-
-// ----------------------
-// Inventory DOM
-// ----------------------
-function ensureInventoryDom({
-  onSelectCritter,
-  onEquipAccessory,
-  onRefreshOwnership,
-}) {
-  let root = document.getElementById("invRoot");
-  if (root && root.__inv) {
-    root.__inv.setHandlers({
-      onSelectCritter,
-      onEquipAccessory,
-      onRefreshOwnership,
-    });
-    return root;
-  }
-
-  root = document.createElement("div");
-  root.id = "invRoot";
-
-  root.innerHTML = `
-    <div id="invBackdrop" class="inv-hidden"></div>
-
-    <div id="invWindow" class="inv-hidden">
-      <div id="invWindowHeader">
-        <div>
-          <div id="invWindowTitle">Inventar</div>
-          <div id="invWindowSub">Critter und Accessoires</div>
-        </div>
-        <button id="invCloseBtn" title="Schließen">✕</button>
-      </div>
-
-      <div id="invTabs">
-        <button id="tabCritter" class="tab active">Critter</button>
-        <button id="tabAcc" class="tab">Accessoires</button>
-      </div>
-
-      <div id="invToolbar">
-        <button id="invSyncBtn" title="NFT Sync">NFT Sync</button>
-      </div>
-
-      <div id="invContent"></div>
-    </div>
-  `;
-
-  document.body.appendChild(root);
-
-  const style = document.createElement("style");
-  style.textContent = `
-    #invRoot {
-      position: fixed;
-      inset: 0;
-      z-index: 120000;
-      pointer-events: none;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    }
-
-    #invBackdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.58);
-      backdrop-filter: blur(6px);
-      pointer-events: auto;
-    }
-
-    #invWindow {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: min(920px, calc(100vw - 28px));
-      height: min(700px, calc(100vh - 28px));
-      background:
-        linear-gradient(180deg, rgba(22,27,40,0.98), rgba(12,15,24,0.98));
-      border: 1px solid rgba(170,216,255,0.22);
-      border-radius: 22px;
-      box-shadow:
-        0 24px 70px rgba(0,0,0,0.48),
-        inset 0 1px 0 rgba(255,255,255,0.04);
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      pointer-events: auto;
-    }
-
-    .inv-hidden {
-      display: none !important;
-    }
-
-    #invWindowHeader {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 18px 20px 14px 20px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
-    }
-
-    #invWindowTitle {
-      color: #ffffff;
-      font-size: 24px;
-      font-weight: 800;
-      letter-spacing: 0.3px;
-    }
-
-    #invWindowSub {
-      color: rgba(255,255,255,0.68);
-      font-size: 13px;
-      margin-top: 4px;
-    }
-
-    #invCloseBtn {
-      width: 42px;
-      height: 42px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: rgba(255,255,255,0.06);
-      color: #fff;
-      font-size: 18px;
-      cursor: pointer;
-    }
-
-    #invCloseBtn:hover {
-      background: rgba(255,255,255,0.12);
-    }
-
-    #invTabs {
-      display: flex;
-      gap: 10px;
-      padding: 16px 20px 10px 20px;
-    }
-
-    #invTabs .tab {
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.05);
-      color: rgba(255,255,255,0.9);
-      padding: 12px 18px;
-      border-radius: 14px;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-      min-width: 140px;
-    }
-
-    #invTabs .tab.active {
-      background: linear-gradient(180deg, rgba(127,212,255,0.22), rgba(127,212,255,0.10));
-      border-color: rgba(170,216,255,0.35);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
-    }
-
-    #invToolbar {
-      display: flex;
-      justify-content: flex-end;
-      padding: 0 20px 12px 20px;
-    }
-
-    #invSyncBtn {
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.06);
-      color: rgba(255,255,255,0.92);
-      padding: 10px 14px;
-      border-radius: 12px;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    #invSyncBtn:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
-
-    #invContent {
-      flex: 1;
-      overflow: auto;
-      padding: 0 20px 20px 20px;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 14px;
-    }
-
-    .item {
-      position: relative;
-      border: 1px solid rgba(255,255,255,0.10);
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
-      border-radius: 18px;
-      padding: 14px 12px;
-      color: rgba(255,255,255,0.92);
-      text-align: center;
-      user-select: none;
-      cursor: pointer;
-      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
-      min-height: 170px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-
-    .item:hover {
-      transform: translateY(-2px);
-      border-color: rgba(170,216,255,0.28);
-      background:
-        linear-gradient(180deg, rgba(127,212,255,0.12), rgba(255,255,255,0.04));
-    }
-
-    .item.selected {
-      border-color: rgba(170,216,255,0.95);
-      background:
-        linear-gradient(180deg, rgba(127,212,255,0.30), rgba(127,212,255,0.14));
-      box-shadow:
-        0 0 0 2px rgba(170,216,255,0.35) inset,
-        0 0 18px rgba(127,212,255,0.22);
-      transform: translateY(-2px);
-    }
-
-    .item.locked {
-      opacity: 0.42;
-      filter: grayscale(0.35);
-    }
-
-    .item img {
-      width: 72px;
-      height: 72px;
-      object-fit: contain;
-      display: block;
-      margin: 0 auto 10px auto;
-      image-rendering: auto;
-      pointer-events: none;
-    }
-
-    .item .label {
-      font-size: 14px;
-      font-weight: 800;
-    }
-
-    .item .id {
-      font-size: 12px;
-      opacity: 0.72;
-      margin-top: 6px;
-    }
-
-    .lockBadge {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      font-size: 11px;
-      font-weight: 800;
-      background: rgba(0,0,0,0.45);
-      border: 1px solid rgba(255,255,255,0.15);
-      padding: 4px 7px;
-      border-radius: 999px;
-    }
-
-    .hint {
-      font-size: 12px;
-      opacity: 0.72;
-      margin-top: 14px;
-      line-height: 1.35;
-      color: rgba(255,255,255,0.82);
-    }
-
-    @media (max-width: 700px) {
-      #invWindow {
-        width: calc(100vw - 16px);
-        height: calc(100vh - 16px);
-        border-radius: 18px;
-      }
-
-      #invWindowTitle {
-        font-size: 20px;
-      }
-
-      #invTabs .tab {
-        min-width: 0;
-        flex: 1;
-      }
-
-      .grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-      }
-
-      .item {
-        min-height: 150px;
-        padding: 12px 10px;
-      }
-
-      .item img {
-        width: 60px;
-        height: 60px;
-      }
-    }
-  `;
-  document.head.appendChild(style);
-
-  const backdrop = root.querySelector("#invBackdrop");
-  const win = root.querySelector("#invWindow");
-  const closeBtn = root.querySelector("#invCloseBtn");
-  const tabCritter = root.querySelector("#tabCritter");
-  const tabAcc = root.querySelector("#tabAcc");
-  const content = root.querySelector("#invContent");
-  const syncBtn = root.querySelector("#invSyncBtn");
-
-  let handlers = {
-    onSelectCritter,
-    onEquipAccessory,
-    onRefreshOwnership,
-  };
-
-  let activeTab = "critter";
-  let currentProfile = null;
-  let currentSelectedCritterId = null;
-  let open = false;
-
-  function setOpen(v) {
-    open = !!v;
-    backdrop.classList.toggle("inv-hidden", !open);
-    win.classList.toggle("inv-hidden", !open);
-    document.body.style.overflow = open ? "hidden" : "";
-  }
-
-  function setTab(t) {
-    activeTab = t;
-    tabCritter.classList.toggle("active", t === "critter");
-    tabAcc.classList.toggle("active", t === "acc");
-  }
-
-  function renderCritterTab() {
-    const selected =
-      currentSelectedCritterId ?? currentProfile?.selectedCritterId ?? "c1";
-
-    const ownedSet = new Set(currentProfile?.ownedCritterIds ?? []);
-
-    content.innerHTML = `
-      <div class="grid">
-        ${CRITTERS.map((c) => {
-          const isOwned = ownedSet.has(c.id);
-          const imgSrc = `${getCritterAssetBase(c.folder)}/spritesheet.png`;
-
-          return `
-            <div
-              class="item ${c.id === selected ? "selected" : ""} ${
-                !isOwned ? "locked" : ""
-              }"
-              data-id="${c.id}"
-            >
-              ${!isOwned ? `<div class="lockBadge">NFT</div>` : ""}
-              <img src="${imgSrc}" alt="${c.name}" />
-              <div class="label">${c.name}</div>
-              <div class="id">#${c.nftNumber}</div>
-            </div>
-          `;
-        }).join("")}
-      </div>
-      <div class="hint">
-        Sichtbar sind alle Critter. Spielbar sind nur Critter aus <code>ownedCritterIds</code>.
-      </div>
-    `;
-
-    content.querySelectorAll(".item").forEach((el) => {
-      el.addEventListener("click", () => {
-        const id = el.getAttribute("data-id");
-        handlers.onSelectCritter?.(id);
-      });
-    });
-  }
-
-  function renderAccessoryTab() {
-    const eq = currentProfile?.equippedAccessories ?? {
-      head: null,
-      body: null,
-      aura: null,
-    };
-
-    content.innerHTML = `
-      <div class="grid">
-        ${["head", "body", "aura"]
-          .map((slot) => {
-            const val = eq[slot] ?? null;
-
-            return `
-              <div class="item ${val ? "selected" : ""}" data-slot="${slot}">
-                <div class="label">${slot.toUpperCase()}</div>
-                <div class="id">${val ?? "leer"}</div>
-              </div>
-            `;
-          })
-          .join("")}
-      </div>
-      <div class="hint">
-        Accessoires sind aktuell noch Platzhalter.
-      </div>
-    `;
-
-    content.querySelectorAll(".item").forEach((el) => {
-      el.addEventListener("click", () => {
-        const slot = el.getAttribute("data-slot");
-        const cur = eq[slot] ?? null;
-        const next = cur ? null : `a_${slot}_01`;
-        handlers.onEquipAccessory?.(slot, next);
-      });
-    });
-  }
-
-  function render() {
-    if (!currentProfile) return;
-
-    const hasWallet =
-      typeof currentProfile.wallet === "string" &&
-      currentProfile.wallet.length > 0;
-
-    syncBtn.disabled = !hasWallet;
-    syncBtn.textContent = hasWallet ? "NFT Sync" : "Wallet fehlt";
-
-    if (activeTab === "critter") {
-      renderCritterTab();
-    } else {
-      renderAccessoryTab();
-    }
-  }
-
-  backdrop.addEventListener("click", () => setOpen(false));
-  closeBtn.addEventListener("click", () => setOpen(false));
-
-  tabCritter.addEventListener("click", () => {
-    setTab("critter");
-    render();
-  });
-
-  tabAcc.addEventListener("click", () => {
-    setTab("acc");
-    render();
-  });
-
-  syncBtn.addEventListener("click", async () => {
-    if (!currentProfile?.wallet) return;
-
-    syncBtn.disabled = true;
-    syncBtn.textContent = "Sync läuft...";
-
-    try {
-      await handlers.onRefreshOwnership?.();
-    } finally {
-      syncBtn.disabled = false;
-      syncBtn.textContent = "NFT Sync";
-    }
-  });
-
-  root.__inv = {
-    setHandlers(nextHandlers) {
-      handlers = {
-        ...handlers,
-        ...nextHandlers,
-      };
-    },
-
-    setProfile(p) {
-      currentProfile = {
-        ...p,
-        equippedAccessories: {
-          head: p?.equippedAccessories?.head ?? null,
-          body: p?.equippedAccessories?.body ?? null,
-          aura: p?.equippedAccessories?.aura ?? null,
-        },
-        ownedCritterIds: Array.isArray(p?.ownedCritterIds)
-          ? [...p.ownedCritterIds]
-          : [],
-        ownedAccessoryIds: Array.isArray(p?.ownedAccessoryIds)
-          ? [...p.ownedAccessoryIds]
-          : [],
-      };
-
-      currentSelectedCritterId = currentProfile.selectedCritterId ?? "c1";
-      render();
-    },
-
-    setSelectedCritter(id) {
-      currentSelectedCritterId = id;
-
-      if (currentProfile) {
-        currentProfile.selectedCritterId = id;
-      }
-
-      render();
-    },
-
-    open() {
-      setOpen(true);
-    },
-
-    close() {
-      setOpen(false);
-    },
-
-    toggle() {
-      setOpen(!open);
-    },
-
-    setTab(t) {
-      setTab(t);
-      render();
-    },
-  };
-
-  setOpen(false);
-  setTab("critter");
-
-  return root;
-}
+const gamePanelApi = createGamePanel({
+  CRITTERS,
+  getCritterAssetBase,
+  getSettings: () => settings,
+  saveSettings,
+  stopAllKnownMusic,
+  applyGlobalMusicSettings,
+  ensureMenuMusic,
+  ensureOverworldMusic,
+  ensureDungeonMusic,
+  switchSceneToMenu,
+});
+
+const topButtonsApi = createTopButtons();
 
 // ----------------------
 // HUD
@@ -1703,7 +604,7 @@ function bindSceneTouchMovement(scene) {
   const onDown = (pointer) => {
     if (!isTouchLikePointer(pointer)) return;
     if (touchMoveActive) return;
-    if (performance.now() < uiBlockTouchUntil) return;
+    if (performance.now() < topButtonsApi.getUiBlockUntil()) return;
 
     if (pointer.event?.target instanceof HTMLCanvasElement === false) return;
     if (pointer.downElement && pointer.downElement !== scene.game.canvas) return;
@@ -2129,8 +1030,8 @@ class MenuScene extends Phaser.Scene {
     this.menuMusic = null;
     this.menuButtons = [];
     this.isStartingGame = false;
-    this.settingsJustClosedUntil = 0;
     this.isTransitioning = false;
+    this.invRoot = null;
   }
 
   preload() {
@@ -2168,9 +1069,17 @@ class MenuScene extends Phaser.Scene {
   create() {
     const layout = this.getMenuLayout();
 
-    ensureSettingsDom();
-    ensureSceneTopButtons().__topButtons.hide();
+    topButtonsApi.ensureTopButtonsDom().__topButtons.hide();
     this.isTransitioning = false;
+
+    this.invRoot = gamePanelApi.ensureGamePanelDom({
+      onSelectCritter: () => {},
+      onEquipAccessory: () => {},
+      onRefreshOwnership: async () => {},
+    });
+    this.invRoot.__inv.setScene(this);
+    this.invRoot.__inv.setProfile(profile);
+    this.invRoot.__inv.close();
 
     this.cameras.main.setBackgroundColor("#0b0b0f");
 
@@ -2232,7 +1141,11 @@ class MenuScene extends Phaser.Scene {
         layout.btnW,
         layout.btnH,
         "Settings",
-        () => openSceneSettings(this)
+        () => {
+          this.invRoot.__inv.setScene(this);
+          this.invRoot.__inv.setTab("settings");
+          this.invRoot.__inv.open();
+        }
       ),
 
       this.createMenuButton(
@@ -2268,7 +1181,7 @@ class MenuScene extends Phaser.Scene {
 
     this.events.once("shutdown", () => {
       this.scale.off("resize", this.onResize, this);
-      closeSceneSettings(this);
+      this.invRoot?.__inv?.close?.();
     });
   }
 
@@ -2430,8 +1343,8 @@ class MainScene extends Phaser.Scene {
 
     this.targetMarker = null;
     this.invRoot = null;
+    this.topButtons = null;
     this.isTransitioning = false;
-    this.settingsJustClosedUntil = 0;
   }
 
   preload() {
@@ -2488,8 +1401,6 @@ class MainScene extends Phaser.Scene {
 
   create(data) {
     console.log("MAIN CREATE START", data);
-
-    ensureSettingsDom();
 
     this.isTransitioning = false;
     this.triggerCooldownUntil = 0;
@@ -2624,7 +1535,7 @@ class MainScene extends Phaser.Scene {
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys("W,A,S,D");
 
-    this.invRoot = ensureInventoryDom({
+    this.invRoot = gamePanelApi.ensureGamePanelDom({
       onSelectCritter: (id) => {
         if (!profile.ownedCritterIds.includes(id)) return;
 
@@ -2673,6 +1584,7 @@ class MainScene extends Phaser.Scene {
           this.player.setTexture(
             getCritterIdleTexture(profile.selectedCritterId)
           );
+          this.invRoot.__inv.setScene(this);
           this.invRoot.__inv.setProfile(profile);
           updateHud();
         } catch (err) {
@@ -2681,10 +1593,21 @@ class MainScene extends Phaser.Scene {
       },
     });
 
+    this.invRoot.__inv.setScene(this);
     this.invRoot.__inv.setProfile(profile);
 
-    createSceneTopButtons(this);
-    updateSceneTopButtonsPosition();
+    this.topButtons = topButtonsApi.attachTopButtons(this, {
+      onInventory: (scene) => {
+        scene.invRoot?.__inv?.setScene?.(scene);
+        scene.invRoot?.__inv?.setTab?.("critter");
+        scene.invRoot?.__inv?.open?.();
+      },
+      onSettings: (scene) => {
+        scene.invRoot?.__inv?.setScene?.(scene);
+        scene.invRoot?.__inv?.setTab?.("settings");
+        scene.invRoot?.__inv?.open?.();
+      },
+    });
 
     profile.x = startX;
     profile.y = startY;
@@ -2728,13 +1651,11 @@ class MainScene extends Phaser.Scene {
     this.events.once("shutdown", () => {
       this.scale.off("resize", this.onResize, this);
       saveCurrentPlayerState(this);
-      closeSceneSettings(this);
+      this.invRoot?.__inv?.close?.();
     });
   }
 
-  onResize() {
-    updateSceneTopButtonsPosition();
-  }
+  onResize() {}
 
   update(time) {
     if (!this.player || !this.cursors || !this.wasd) return;
@@ -2859,14 +1780,12 @@ class DungeonScene extends Phaser.Scene {
     this._dbgGfx = null;
     this.nextSaveAt = 0;
     this.isTransitioning = false;
-    this.settingsJustClosedUntil = 0;
     this.invRoot = null;
+    this.topButtons = null;
   }
 
   create(data) {
     console.log("DUNGEON CREATE START", data);
-
-    ensureSettingsDom();
 
     this.isTransitioning = false;
     this.triggerCooldownUntil = 0;
@@ -2982,7 +1901,7 @@ class DungeonScene extends Phaser.Scene {
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys("W,A,S,D");
 
-    this.invRoot = ensureInventoryDom({
+    this.invRoot = gamePanelApi.ensureGamePanelDom({
       onSelectCritter: (id) => {
         if (!profile.ownedCritterIds.includes(id)) return;
 
@@ -3031,6 +1950,7 @@ class DungeonScene extends Phaser.Scene {
           this.player.setTexture(
             getCritterIdleTexture(profile.selectedCritterId)
           );
+          this.invRoot.__inv.setScene(this);
           this.invRoot.__inv.setProfile(profile);
           updateHud("Dungeon");
         } catch (err) {
@@ -3039,10 +1959,21 @@ class DungeonScene extends Phaser.Scene {
       },
     });
 
+    this.invRoot.__inv.setScene(this);
     this.invRoot.__inv.setProfile(profile);
 
-    createSceneTopButtons(this);
-    updateSceneTopButtonsPosition();
+    this.topButtons = topButtonsApi.attachTopButtons(this, {
+      onInventory: (scene) => {
+        scene.invRoot?.__inv?.setScene?.(scene);
+        scene.invRoot?.__inv?.setTab?.("critter");
+        scene.invRoot?.__inv?.open?.();
+      },
+      onSettings: (scene) => {
+        scene.invRoot?.__inv?.setScene?.(scene);
+        scene.invRoot?.__inv?.setTab?.("settings");
+        scene.invRoot?.__inv?.open?.();
+      },
+    });
 
     updateHud("Dungeon");
 
@@ -3050,13 +1981,11 @@ class DungeonScene extends Phaser.Scene {
     this.events.once("shutdown", () => {
       this.scale.off("resize", this.onResize, this);
       saveCurrentPlayerState(this);
-      closeSceneSettings(this);
+      this.invRoot?.__inv?.close?.();
     });
   }
 
-  onResize() {
-    updateSceneTopButtonsPosition();
-  }
+  onResize() {}
 
   update(time) {
     if (!this.player || !this.cursors || !this.wasd) return;
@@ -3234,7 +2163,6 @@ async function bootstrap() {
   const applyViewportResize = () => {
     const { width, height } = getViewportSize();
     game.scale.resize(width, height);
-    updateSceneTopButtonsPosition();
   };
 
   window.addEventListener("resize", applyViewportResize);

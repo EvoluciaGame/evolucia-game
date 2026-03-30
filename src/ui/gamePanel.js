@@ -38,17 +38,17 @@ export function createGamePanel({
             <div id="invWindowTitle">Inventar</div>
             <div id="invWindowSub">Critter, Accessoires und Einstellungen</div>
           </div>
-          <button id="invCloseBtn" title="Schließen">✕</button>
+          <button id="invCloseBtn" title="Schließen" type="button">✕</button>
         </div>
 
         <div id="invTabs">
-          <button id="tabCritter" class="tab active">Critter</button>
-          <button id="tabAcc" class="tab">Accessoires</button>
-          <button id="tabSettings" class="tab">Settings</button>
+          <button id="tabCritter" class="tab active" type="button">Critter</button>
+          <button id="tabAcc" class="tab" type="button">Accessoires</button>
+          <button id="tabSettings" class="tab" type="button">Settings</button>
         </div>
 
         <div id="invToolbar">
-          <button id="invSyncBtn" title="NFT Sync">NFT Sync</button>
+          <button id="invSyncBtn" title="NFT Sync" type="button">NFT Sync</button>
         </div>
 
         <div id="invContent"></div>
@@ -80,12 +80,16 @@ export function createGamePanel({
       }
 
       #invWindow {
-        position: fixed;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
+        position: fixed !important;
+        left: 50% !important;
+        top: 50% !important;
+        right: auto !important;
+        bottom: auto !important;
+        transform: translate(-50%, -50%) !important;
         width: min(920px, calc(100vw - 28px));
         height: min(700px, calc(100vh - 28px));
+        max-width: calc(100vw - 28px);
+        max-height: calc(100vh - 28px);
         background:
           linear-gradient(180deg, rgba(22,27,40,0.98), rgba(12,15,24,0.98));
         border: 1px solid rgba(170,216,255,0.22);
@@ -97,6 +101,7 @@ export function createGamePanel({
         display: flex;
         flex-direction: column;
         pointer-events: auto;
+        margin: 0 !important;
       }
 
       .inv-hidden {
@@ -388,6 +393,8 @@ export function createGamePanel({
         #invWindow {
           width: calc(100vw - 16px);
           height: calc(100vh - 16px);
+          max-width: calc(100vw - 16px);
+          max-height: calc(100vh - 16px);
           border-radius: 18px;
         }
 
@@ -485,6 +492,16 @@ export function createGamePanel({
       tabSettings.classList.toggle("active", tab === "settings");
 
       syncBtn.style.display = tab === "critter" ? "inline-flex" : "none";
+
+      if (tab === "settings") {
+        win.querySelector("#invWindowTitle").textContent = "Settings";
+        win.querySelector("#invWindowSub").textContent =
+          "Audio und Spieloptionen";
+      } else {
+        win.querySelector("#invWindowTitle").textContent = "Inventar";
+        win.querySelector("#invWindowSub").textContent =
+          "Critter, Accessoires und Einstellungen";
+      }
     }
 
     function renderCritterTab() {
@@ -501,7 +518,9 @@ export function createGamePanel({
 
             return `
               <div
-                class="item ${c.id === selected ? "selected" : ""} ${!isOwned ? "locked" : ""}"
+                class="item ${c.id === selected ? "selected" : ""} ${
+                  !isOwned ? "locked" : ""
+                }"
                 data-id="${c.id}"
               >
                 ${!isOwned ? `<div class="lockBadge">NFT</div>` : ""}
@@ -575,7 +594,7 @@ export function createGamePanel({
               <div class="settingsLabel">Musik</div>
               <div class="settingsSubLabel">Hintergrundmusik an oder aus</div>
             </div>
-            <button id="invSettingsMusicToggle" class="settingsActionBtn">
+            <button id="invSettingsMusicToggle" class="settingsActionBtn" type="button">
               ${s.musicEnabled ? "AN" : "AUS"}
             </button>
           </div>
@@ -586,11 +605,11 @@ export function createGamePanel({
               <div class="settingsSubLabel">Globale Musiklautstärke</div>
             </div>
             <div class="settingsVolumeWrap">
-              <button id="invSettingsMinus" class="settingsIconBtn">−</button>
+              <button id="invSettingsMinus" class="settingsIconBtn" type="button">−</button>
               <div id="invSettingsVolumeValue" class="settingsVolumeValue">
                 ${Math.round(s.musicVolume * 100)}%
               </div>
-              <button id="invSettingsPlus" class="settingsIconBtn">+</button>
+              <button id="invSettingsPlus" class="settingsIconBtn" type="button">+</button>
             </div>
           </div>
 
@@ -602,6 +621,7 @@ export function createGamePanel({
             <button
               id="invBackToMenuBtn"
               class="settingsDangerBtn"
+              type="button"
               ${isMenu ? "disabled" : ""}
             >
               ${isMenu ? "Bereits im Menü" : "Back to Menu"}
@@ -616,7 +636,7 @@ export function createGamePanel({
       const backBtn = content.querySelector("#invBackToMenuBtn");
 
       musicToggle?.addEventListener("click", () => {
-        const settings = getSettings();
+        const settings = { ...getSettings() };
         settings.musicEnabled = !settings.musicEnabled;
         saveSettings(settings);
 
@@ -640,7 +660,7 @@ export function createGamePanel({
       });
 
       minusBtn?.addEventListener("click", () => {
-        const settings = getSettings();
+        const settings = { ...getSettings() };
         settings.musicVolume = Math.max(
           0,
           Math.round((settings.musicVolume - 0.1) * 10) / 10
@@ -655,7 +675,7 @@ export function createGamePanel({
       });
 
       plusBtn?.addEventListener("click", () => {
-        const settings = getSettings();
+        const settings = { ...getSettings() };
         settings.musicVolume = Math.min(
           1,
           Math.round((settings.musicVolume + 0.1) * 10) / 10
