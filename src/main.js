@@ -464,350 +464,585 @@ function applyGlobalMusicSettings(game) {
 }
 
 // ----------------------
-// Shared settings popup
+// Shared settings popup (DOM like inventory)
 // ----------------------
-function closeSceneSettings(scene) {
-  if (!scene.settingsOverlay) return;
-  scene.settingsOverlay.destroy(true);
-  scene.settingsOverlay = null;
-  scene.settingsJustClosedUntil = scene.time.now + 250;
-}
+function ensureSettingsDom() {
+  let root = document.getElementById("settingsRoot");
+  if (root) return root;
 
-function openSceneSettings(scene, uiScale = 1) {
-  if (scene.time.now < (scene.settingsJustClosedUntil ?? 0)) return;
-  if (scene.settingsOverlay) return;
+  root = document.createElement("div");
+  root.id = "settingsRoot";
+  root.innerHTML = `
+    <div id="settingsBackdrop" class="settings-hidden"></div>
 
-  const { width, height } = scene.scale;
+    <div id="settingsWindow" class="settings-hidden">
+      <div id="settingsWindowHeader">
+        <div>
+          <div id="settingsWindowTitle">Settings</div>
+          <div id="settingsWindowSub">Audio und Spieloptionen</div>
+        </div>
+        <button id="settingsCloseBtn" title="Schließen">✕</button>
+      </div>
 
-  const panelW = Math.min(width * 0.88, Math.round(430 * uiScale));
-  const panelH = Math.min(height * 0.72, Math.round(340 * uiScale));
+      <div id="settingsContent">
+        <div class="settingsRow">
+          <div class="settingsLabelWrap">
+            <div class="settingsLabel">Musik</div>
+            <div class="settingsSubLabel">Hintergrundmusik an oder aus</div>
+          </div>
+          <button id="settingsMusicToggle" class="settingsActionBtn">AN</button>
+        </div>
 
-  const cx = width / 2;
-  const cy = height / 2;
+        <div class="settingsRow">
+          <div class="settingsLabelWrap">
+            <div class="settingsLabel">Lautstärke</div>
+            <div class="settingsSubLabel">Globale Musiklautstärke</div>
+          </div>
+          <div class="settingsVolumeWrap">
+            <button id="settingsMinusBtn" class="settingsIconBtn">−</button>
+            <div id="settingsVolumeValue">40%</div>
+            <button id="settingsPlusBtn" class="settingsIconBtn">+</button>
+          </div>
+        </div>
 
-  const leftX = cx - panelW * 0.32;
-  const rightX = cx + panelW * 0.23;
+        <div class="settingsRow">
+          <div class="settingsLabelWrap">
+            <div class="settingsLabel">Navigation</div>
+            <div class="settingsSubLabel">Zurück ins Hauptmenü wechseln</div>
+          </div>
+          <button id="settingsBackToMenuBtn" class="settingsDangerBtn">Back to Menu</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(root);
 
-  const row1Y = cy - panelH * 0.18;
-  const row2Y = cy + panelH * 0.02;
-  const closeY = cy + panelH * 0.33;
+  const style = document.createElement("style");
+  style.textContent = `
+    #settingsRoot {
+      position: fixed;
+      inset: 0;
+      z-index: 130000;
+      pointer-events: none;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
 
-  scene.settingsOverlay = scene.add.container(0, 0).setDepth(5000);
+    #settingsBackdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.58);
+      backdrop-filter: blur(6px);
+      pointer-events: auto;
+    }
 
-  const bg = scene.add
-    .rectangle(cx, cy, width, height, 0x000000, 0.6)
-    .setInteractive({ useHandCursor: !IS_TOUCH_DEVICE });
+    #settingsWindow {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(920px, calc(100vw - 28px));
+      max-width: calc(100vw - 28px);
+      min-height: 360px;
+      background:
+        linear-gradient(180deg, rgba(22,27,40,0.98), rgba(12,15,24,0.98));
+      border: 1px solid rgba(170,216,255,0.22);
+      border-radius: 22px;
+      box-shadow:
+        0 24px 70px rgba(0,0,0,0.48),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      pointer-events: auto;
+    }
 
-  const panel = scene.add
-    .rectangle(cx, cy, panelW, panelH, 0x151924, 0.96)
-    .setStrokeStyle(Math.max(1, Math.round(2 * uiScale)), 0xaad8ff, 0.45);
+    .settings-hidden {
+      display: none !important;
+    }
 
-  const title = scene.add
-    .text(cx, cy - panelH * 0.36, "Settings", {
-      fontFamily: "Arial, sans-serif",
-      fontSize: `${Math.round(28 * uiScale)}px`,
-      color: "#ffffff",
-      fontStyle: "bold",
-      stroke: "#000000",
-      strokeThickness: Math.max(1, Math.round(3 * uiScale)),
-    })
-    .setOrigin(0.5);
+    #settingsWindowHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px 14px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+    }
 
-  const musicLabel = scene.add
-    .text(leftX, row1Y, "Musik", {
-      fontFamily: "Arial, sans-serif",
-      fontSize: `${Math.round(22 * uiScale)}px`,
-      color: "#ffffff",
-    })
-    .setOrigin(0, 0.5);
+    #settingsWindowTitle {
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+    }
 
-  const musicToggle = scene.add
-    .text(rightX, row1Y, settings.musicEnabled ? "AN" : "AUS", {
-      fontFamily: "Arial, sans-serif",
-      fontSize: `${Math.round(22 * uiScale)}px`,
-      color: "#ffffff",
-      backgroundColor: "#263248",
-      padding: {
-        left: Math.round(14 * uiScale),
-        right: Math.round(14 * uiScale),
-        top: Math.round(8 * uiScale),
-        bottom: Math.round(8 * uiScale),
-      },
-    })
-    .setOrigin(0.5)
-    .setInteractive({ useHandCursor: !IS_TOUCH_DEVICE });
+    #settingsWindowSub {
+      color: rgba(255,255,255,0.68);
+      font-size: 13px;
+      margin-top: 4px;
+    }
 
-  const volumeLabel = scene.add
-    .text(leftX, row2Y, "Lautstärke", {
-      fontFamily: "Arial, sans-serif",
-      fontSize: `${Math.round(22 * uiScale)}px`,
-      color: "#ffffff",
-    })
-    .setOrigin(0, 0.5);
+    #settingsCloseBtn {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+    }
 
-  const volumeValue = scene.add
-    .text(rightX, row2Y, `${Math.round(settings.musicVolume * 100)}%`, {
-      fontFamily: "Arial, sans-serif",
-      fontSize: `${Math.round(22 * uiScale)}px`,
-      color: "#ffffff",
-    })
-    .setOrigin(0.5);
+    #settingsCloseBtn:hover {
+      background: rgba(255,255,255,0.12);
+    }
 
-  const minusBtn = scene.add
-    .text(rightX - 70 * uiScale, row2Y, "-", {
-      fontFamily: "Arial, sans-serif",
-      fontSize: `${Math.round(26 * uiScale)}px`,
-      color: "#ffffff",
-      backgroundColor: "#263248",
-      padding: {
-        left: Math.round(12 * uiScale),
-        right: Math.round(12 * uiScale),
-        top: Math.round(6 * uiScale),
-        bottom: Math.round(6 * uiScale),
-      },
-    })
-    .setOrigin(0.5)
-    .setInteractive({ useHandCursor: !IS_TOUCH_DEVICE });
+    #settingsContent {
+      padding: 18px 20px 22px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      flex: 1;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
 
-  const plusBtn = scene.add
-    .text(rightX + 70 * uiScale, row2Y, "+", {
-      fontFamily: "Arial, sans-serif",
-      fontSize: `${Math.round(26 * uiScale)}px`,
-      color: "#ffffff",
-      backgroundColor: "#263248",
-      padding: {
-        left: Math.round(10 * uiScale),
-        right: Math.round(10 * uiScale),
-        top: Math.round(6 * uiScale),
-        bottom: Math.round(6 * uiScale),
-      },
-    })
-    .setOrigin(0.5)
-    .setInteractive({ useHandCursor: !IS_TOUCH_DEVICE });
+    .settingsRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+      border-radius: 18px;
+      padding: 18px 16px;
+    }
 
-  const closeBtnBg = scene.add
-    .rectangle(
-      cx,
-      closeY,
-      Math.round(170 * uiScale),
-      Math.round(50 * uiScale),
-      0x1f2a3d,
-      1
-    )
-    .setStrokeStyle(Math.max(1, Math.round(2 * uiScale)), 0xaad8ff, 0.45)
-    .setInteractive({ useHandCursor: !IS_TOUCH_DEVICE });
+    .settingsLabelWrap {
+      min-width: 0;
+      flex: 1;
+    }
 
-  const closeBtnText = scene.add
-    .text(cx, closeY, "Schließen", {
-      fontFamily: "Arial, sans-serif",
-      fontSize: `${Math.round(22 * uiScale)}px`,
-      color: "#ffffff",
-      fontStyle: "bold",
-    })
-    .setOrigin(0.5);
+    .settingsLabel {
+      color: rgba(255,255,255,0.96);
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+    }
 
-  const refreshVolumeUi = () => {
-    volumeValue.setText(`${Math.round(settings.musicVolume * 100)}%`);
-    applyGlobalMusicSettings(scene.game);
-  };
+    .settingsSubLabel {
+      color: rgba(255,255,255,0.66);
+      font-size: 13px;
+      margin-top: 5px;
+      line-height: 1.35;
+    }
 
-  bg.on("pointerdown", () => {
-    closeSceneSettings(scene);
-  });
+    .settingsActionBtn,
+    .settingsIconBtn,
+    .settingsDangerBtn {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.94);
+      border-radius: 14px;
+      cursor: pointer;
+      font-weight: 800;
+    }
 
-  musicToggle.on("pointerdown", () => {
-    settings.musicEnabled = !settings.musicEnabled;
-    saveSettings();
+    .settingsActionBtn,
+    .settingsDangerBtn {
+      min-width: 120px;
+      padding: 12px 16px;
+      font-size: 14px;
+    }
 
-    musicToggle.setText(settings.musicEnabled ? "AN" : "AUS");
+    .settingsActionBtn:hover,
+    .settingsIconBtn:hover,
+    .settingsDangerBtn:hover {
+      background: rgba(255,255,255,0.12);
+    }
 
-    if (!settings.musicEnabled) {
-      stopAllKnownMusic(scene);
-    } else {
-      applyGlobalMusicSettings(scene.game);
-      const sceneKey = scene.scene.key;
-      if (sceneKey === "menu") ensureMenuMusic(scene);
-      if (sceneKey === "main") ensureOverworldMusic(scene);
-      if (sceneKey === "dungeon") ensureDungeonMusic(scene);
+    .settingsDangerBtn {
+      background: rgba(170, 40, 40, 0.22);
+      border-color: rgba(255, 120, 120, 0.28);
+    }
+
+    .settingsDangerBtn:hover {
+      background: rgba(170, 40, 40, 0.34);
+      border-color: rgba(255, 150, 150, 0.42);
+    }
+
+    .settingsVolumeWrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .settingsIconBtn {
+      width: 42px;
+      height: 42px;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    #settingsVolumeValue {
+      min-width: 70px;
+      text-align: center;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    @media (max-width: 700px) {
+      #settingsWindow {
+        width: calc(100vw - 16px);
+        border-radius: 18px;
+      }
+
+      #settingsWindowTitle {
+        font-size: 20px;
+      }
+
+      #settingsContent {
+        padding: 14px;
+      }
+
+      .settingsRow {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .settingsActionBtn,
+      .settingsDangerBtn {
+        width: 100%;
+      }
+
+      .settingsVolumeWrap {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .settingsIconBtn {
+        width: 48px;
+        height: 48px;
+      }
+
+      #settingsVolumeValue {
+        flex: 1;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  const backdrop = root.querySelector("#settingsBackdrop");
+  const win = root.querySelector("#settingsWindow");
+  const closeBtn = root.querySelector("#settingsCloseBtn");
+  const musicToggle = root.querySelector("#settingsMusicToggle");
+  const minusBtn = root.querySelector("#settingsMinusBtn");
+  const plusBtn = root.querySelector("#settingsPlusBtn");
+  const volumeValue = root.querySelector("#settingsVolumeValue");
+  const backToMenuBtn = root.querySelector("#settingsBackToMenuBtn");
+
+  let open = false;
+  let activeScene = null;
+
+  function refreshUi() {
+    musicToggle.textContent = settings.musicEnabled ? "AN" : "AUS";
+    volumeValue.textContent = `${Math.round(settings.musicVolume * 100)}%`;
+
+    const isMenu = activeScene?.scene?.key === "menu";
+    backToMenuBtn.disabled = !!isMenu;
+    backToMenuBtn.textContent = isMenu ? "Bereits im Menü" : "Back to Menu";
+    backToMenuBtn.style.opacity = isMenu ? "0.5" : "1";
+    backToMenuBtn.style.cursor = isMenu ? "default" : "pointer";
+  }
+
+  function setOpen(v) {
+    open = !!v;
+    backdrop.classList.toggle("settings-hidden", !open);
+    win.classList.toggle("settings-hidden", !open);
+    document.body.style.overflow = open ? "hidden" : "";
+    refreshUi();
+  }
+
+  backdrop.addEventListener("click", () => {
+    setOpen(false);
+    if (activeScene) {
+      activeScene.settingsJustClosedUntil = activeScene.time.now + 250;
     }
   });
 
-  minusBtn.on("pointerdown", () => {
+  closeBtn.addEventListener("click", () => {
+    setOpen(false);
+    if (activeScene) {
+      activeScene.settingsJustClosedUntil = activeScene.time.now + 250;
+    }
+  });
+
+  musicToggle.addEventListener("click", () => {
+    settings.musicEnabled = !settings.musicEnabled;
+    saveSettings();
+    refreshUi();
+
+    if (activeScene) {
+      if (!settings.musicEnabled) {
+        stopAllKnownMusic(activeScene);
+      } else {
+        applyGlobalMusicSettings(activeScene.game);
+        const sceneKey = activeScene.scene.key;
+        if (sceneKey === "menu") ensureMenuMusic(activeScene);
+        if (sceneKey === "main") ensureOverworldMusic(activeScene);
+        if (sceneKey === "dungeon") ensureDungeonMusic(activeScene);
+      }
+    }
+  });
+
+  minusBtn.addEventListener("click", () => {
     settings.musicVolume = Math.max(
       0,
       Math.round((settings.musicVolume - 0.1) * 10) / 10
     );
     saveSettings();
-    refreshVolumeUi();
+    refreshUi();
+
+    if (activeScene?.game) {
+      applyGlobalMusicSettings(activeScene.game);
+    }
   });
 
-  plusBtn.on("pointerdown", () => {
+  plusBtn.addEventListener("click", () => {
     settings.musicVolume = Math.min(
       1,
       Math.round((settings.musicVolume + 0.1) * 10) / 10
     );
     saveSettings();
-    refreshVolumeUi();
+    refreshUi();
+
+    if (activeScene?.game) {
+      applyGlobalMusicSettings(activeScene.game);
+    }
   });
 
-  closeBtnBg.on("pointerdown", () => {
-    closeSceneSettings(scene);
+  backToMenuBtn.addEventListener("click", () => {
+    if (!activeScene) return;
+    if (activeScene.scene.key === "menu") return;
+    switchSceneToMenu(activeScene);
   });
 
-  scene.settingsOverlay.add([
-    bg,
-    panel,
-    title,
-    musicLabel,
-    musicToggle,
-    volumeLabel,
-    volumeValue,
-    minusBtn,
-    plusBtn,
-    closeBtnBg,
-    closeBtnText,
-  ]);
+  root.__settings = {
+    open(scene) {
+      activeScene = scene;
+      setOpen(true);
+    },
+    close() {
+      setOpen(false);
+      if (activeScene) {
+        activeScene.settingsJustClosedUntil = activeScene.time.now + 250;
+      }
+    },
+    isOpen() {
+      return open;
+    },
+  };
+
+  setOpen(false);
+  refreshUi();
+  return root;
+}
+
+function closeSceneSettings(scene) {
+  const root = ensureSettingsDom();
+  root.__settings.close();
+}
+
+function openSceneSettings(scene) {
+  if (scene.time.now < (scene.settingsJustClosedUntil ?? 0)) return;
+  const root = ensureSettingsDom();
+  root.__settings.open(scene);
+}
+
+function switchSceneToMenu(scene) {
+  if (!scene) return;
+
+  scene.invRoot?.__inv?.close?.();
+  closeSceneSettings(scene);
+  saveCurrentPlayerState(scene);
+  stopAllKnownMusic(scene);
+
+  if (scene.isTransitioning) return;
+  scene.isTransitioning = true;
+
+  if (scene.scene.key === "menu") return;
+
+  if (scene.cameras?.main) {
+    scene.cameras.main.fadeOut(300, 0, 0, 0);
+
+    scene.time.delayedCall(320, () => {
+      scene.scene.start("menu");
+    });
+  } else {
+    scene.scene.start("menu");
+  }
 }
 
 // ----------------------
-// Top-right buttons
+// Top-right buttons (DOM fixed)
 // ----------------------
 let uiBlockTouchUntil = 0;
 
-function createTopRightCircleButton(scene, x, y, radius, label, onClick) {
-  const size = radius * 2 + 18;
+function ensureSceneTopButtons() {
+  let root = document.getElementById("sceneTopButtons");
+  if (root) return root;
 
-  const bg = scene.add
-    .circle(x, y, radius, 0x151924, 0.96)
-    .setStrokeStyle(2, 0xaad8ff, 0.55)
-    .setDepth(20000)
-    .setScrollFactor(0);
+  root = document.createElement("div");
+  root.id = "sceneTopButtons";
+  root.innerHTML = `
+    <button id="sceneInventoryBtn" class="scene-top-btn" title="Inventar">🎒</button>
+    <button id="sceneSettingsBtn" class="scene-top-btn" title="Settings">⚙</button>
+  `;
+  document.body.appendChild(root);
 
-  const text = scene.add
-    .text(x, y, label, {
-      fontFamily: "Arial, sans-serif",
-      fontSize: `${Math.round(radius * 0.95)}px`,
-      color: "#ffffff",
-    })
-    .setOrigin(0.5)
-    .setDepth(20001)
-    .setScrollFactor(0);
+  const style = document.createElement("style");
+  style.textContent = `
+    #sceneTopButtons {
+      position: fixed !important;
+      top: max(10px, env(safe-area-inset-top, 0px)) !important;
+      right: max(10px, env(safe-area-inset-right, 0px)) !important;
+      left: auto !important;
+      bottom: auto !important;
+      transform: none !important;
+      z-index: 125000 !important;
+      display: flex;
+      flex-direction: row;
+      gap: 10px;
+      pointer-events: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
 
-  const hit = scene.add
-    .rectangle(x, y, size, size, 0xffffff, 0.001)
-    .setDepth(20002)
-    .setScrollFactor(0)
-    .setInteractive({ useHandCursor: !IS_TOUCH_DEVICE });
+    .scene-top-btn {
+      width: 52px;
+      height: 52px;
+      border-radius: 999px;
+      border: 1px solid rgba(170,216,255,0.35);
+      background: rgba(21,25,36,0.96);
+      color: #ffffff;
+      font-size: 24px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      box-shadow:
+        0 10px 24px rgba(0,0,0,0.32),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+      backdrop-filter: blur(8px);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      user-select: none;
+      position: relative;
+      pointer-events: auto !important;
+    }
 
-  const setNormal = () => {
-    bg.setFillStyle(0x151924, 0.96);
-    bg.setStrokeStyle(2, 0xaad8ff, 0.55);
-    bg.setScale(1);
-    text.setScale(1);
-  };
+    .scene-top-btn:hover {
+      background: rgba(32,40,58,0.98);
+      border-color: rgba(198,236,255,0.72);
+      transform: translateY(-1px);
+    }
 
-  const setHover = () => {
-    bg.setFillStyle(0x20283a, 0.98);
-    bg.setStrokeStyle(2, 0xc6ecff, 0.8);
-    bg.setScale(1.04);
-    text.setScale(1.04);
-  };
+    .scene-top-btn:active {
+      transform: scale(0.96);
+    }
 
-  const setPressed = () => {
-    bg.setScale(0.95);
-    text.setScale(0.95);
-  };
+    @media (max-width: 700px) {
+      #sceneTopButtons {
+        top: max(8px, env(safe-area-inset-top, 0px)) !important;
+        right: max(8px, env(safe-area-inset-right, 0px)) !important;
+        gap: 8px;
+      }
 
-  hit.on("pointerover", () => {
-    if (IS_TOUCH_DEVICE) return;
-    setHover();
-  });
-
-  hit.on("pointerout", () => {
-    setNormal();
-  });
-
-  hit.on("pointerdown", (pointer) => {
-    pointer.event?.stopPropagation?.();
-    uiBlockTouchUntil = performance.now() + 250;
-    setPressed();
-  });
-
-  hit.on("pointerup", (pointer) => {
-    pointer.event?.stopPropagation?.();
-    setNormal();
-    onClick();
-  });
-
-  return {
-    bg,
-    text,
-    hit,
-    setPosition(nx, ny) {
-      bg.setPosition(nx, ny);
-      text.setPosition(nx, ny);
-      hit.setPosition(nx, ny);
-    },
-    destroy() {
-      hit.destroy();
-      text.destroy();
-      bg.destroy();
-    },
-  };
-}
-
-function createSceneTopButtons(scene, uiScale = 1) {
-  const { width } = scene.scale;
-  const r = Math.round(22 * uiScale);
-  const topY = Math.round(38 * uiScale);
-  const rightX = width - Math.round(38 * uiScale);
-  const gap = Math.round(62 * uiScale);
-
-  const inventoryBtn = createTopRightCircleButton(
-    scene,
-    rightX - gap,
-    topY,
-    r,
-    "🎒",
-    () => {
-      if (scene.invRoot?.__inv) {
-        scene.invRoot.__inv.toggle();
+      .scene-top-btn {
+        width: 48px;
+        height: 48px;
+        font-size: 22px;
       }
     }
-  );
+  `;
+  document.head.appendChild(style);
 
-  const settingsBtn = createTopRightCircleButton(
-    scene,
-    rightX,
-    topY,
-    r,
-    "⚙",
-    () => {
-      openSceneSettings(scene, getSceneUiScale(scene));
-    }
-  );
+  let activeScene = null;
 
-  scene.inventoryButton = inventoryBtn;
-  scene.settingsButton = settingsBtn;
+  const invBtn = root.querySelector("#sceneInventoryBtn");
+  const settingsBtn = root.querySelector("#sceneSettingsBtn");
+
+  invBtn.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    uiBlockTouchUntil = performance.now() + 250;
+  });
+
+  settingsBtn.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    uiBlockTouchUntil = performance.now() + 250;
+  });
+
+  invBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    uiBlockTouchUntil = performance.now() + 250;
+    if (!activeScene?.invRoot?.__inv) return;
+    activeScene.invRoot.__inv.toggle();
+  });
+
+  settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    uiBlockTouchUntil = performance.now() + 250;
+    if (!activeScene) return;
+    openSceneSettings(activeScene);
+  });
+
+  root.__topButtons = {
+    setScene(scene) {
+      activeScene = scene;
+      root.style.display = "flex";
+      root.style.position = "fixed";
+      root.style.top = "max(10px, env(safe-area-inset-top, 0px))";
+      root.style.right = "max(10px, env(safe-area-inset-right, 0px))";
+      root.style.left = "auto";
+      root.style.bottom = "auto";
+      root.style.transform = "none";
+      root.style.zIndex = "125000";
+      root.style.pointerEvents = "auto";
+    },
+    hide() {
+      root.style.display = "none";
+    },
+  };
+
+  root.style.display = "none";
+  return root;
+}
+
+function createSceneTopButtons(scene) {
+  const root = ensureSceneTopButtons();
+  root.__topButtons.setScene(scene);
 
   scene.events.once("shutdown", () => {
-    scene.inventoryButton?.destroy?.();
-    scene.settingsButton?.destroy?.();
-    scene.inventoryButton = null;
-    scene.settingsButton = null;
+    if (root.__topButtons) {
+      root.__topButtons.hide();
+    }
   });
 }
 
-function updateSceneTopButtonsPosition(scene, uiScale = 1) {
-  if (!scene.inventoryButton || !scene.settingsButton) return;
+function updateSceneTopButtonsPosition() {
+  const root = document.getElementById("sceneTopButtons");
+  if (!root) return;
 
-  const { width } = scene.scale;
-  const topY = Math.round(38 * uiScale);
-  const rightX = width - Math.round(38 * uiScale);
-  const gap = Math.round(62 * uiScale);
-
-  scene.inventoryButton.setPosition(rightX - gap, topY);
-  scene.settingsButton.setPosition(rightX, topY);
+  root.style.position = "fixed";
+  root.style.top = "max(10px, env(safe-area-inset-top, 0px))";
+  root.style.right = "max(10px, env(safe-area-inset-right, 0px))";
+  root.style.left = "auto";
+  root.style.bottom = "auto";
+  root.style.transform = "none";
+  root.style.zIndex = "125000";
 }
 
 // ----------------------
@@ -819,10 +1054,18 @@ function ensureInventoryDom({
   onRefreshOwnership,
 }) {
   let root = document.getElementById("invRoot");
-  if (root) return root;
+  if (root && root.__inv) {
+    root.__inv.setHandlers({
+      onSelectCritter,
+      onEquipAccessory,
+      onRefreshOwnership,
+    });
+    return root;
+  }
 
   root = document.createElement("div");
   root.id = "invRoot";
+
   root.innerHTML = `
     <div id="invBackdrop" class="inv-hidden"></div>
 
@@ -841,12 +1084,13 @@ function ensureInventoryDom({
       </div>
 
       <div id="invToolbar">
-        <button id="invSyncBtn" title="NFT Sync">Sync</button>
+        <button id="invSyncBtn" title="NFT Sync">NFT Sync</button>
       </div>
 
       <div id="invContent"></div>
     </div>
   `;
+
   document.body.appendChild(root);
 
   const style = document.createElement("style");
@@ -1013,10 +1257,13 @@ function ensureInventoryDom({
     }
 
     .item.selected {
-      border-color: rgba(170,216,255,0.62);
+      border-color: rgba(170,216,255,0.95);
       background:
-        linear-gradient(180deg, rgba(127,212,255,0.18), rgba(255,255,255,0.06));
-      box-shadow: 0 0 0 1px rgba(170,216,255,0.12) inset;
+        linear-gradient(180deg, rgba(127,212,255,0.30), rgba(127,212,255,0.14));
+      box-shadow:
+        0 0 0 2px rgba(170,216,255,0.35) inset,
+        0 0 18px rgba(127,212,255,0.22);
+      transform: translateY(-2px);
     }
 
     .item.locked {
@@ -1107,8 +1354,15 @@ function ensureInventoryDom({
   const content = root.querySelector("#invContent");
   const syncBtn = root.querySelector("#invSyncBtn");
 
+  let handlers = {
+    onSelectCritter,
+    onEquipAccessory,
+    onRefreshOwnership,
+  };
+
   let activeTab = "critter";
   let currentProfile = null;
+  let currentSelectedCritterId = null;
   let open = false;
 
   function setOpen(v) {
@@ -1124,6 +1378,83 @@ function ensureInventoryDom({
     tabAcc.classList.toggle("active", t === "acc");
   }
 
+  function renderCritterTab() {
+    const selected =
+      currentSelectedCritterId ?? currentProfile?.selectedCritterId ?? "c1";
+
+    const ownedSet = new Set(currentProfile?.ownedCritterIds ?? []);
+
+    content.innerHTML = `
+      <div class="grid">
+        ${CRITTERS.map((c) => {
+          const isOwned = ownedSet.has(c.id);
+          const imgSrc = `${getCritterAssetBase(c.folder)}/spritesheet.png`;
+
+          return `
+            <div
+              class="item ${c.id === selected ? "selected" : ""} ${
+                !isOwned ? "locked" : ""
+              }"
+              data-id="${c.id}"
+            >
+              ${!isOwned ? `<div class="lockBadge">NFT</div>` : ""}
+              <img src="${imgSrc}" alt="${c.name}" />
+              <div class="label">${c.name}</div>
+              <div class="id">#${c.nftNumber}</div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+      <div class="hint">
+        Sichtbar sind alle Critter. Spielbar sind nur Critter aus <code>ownedCritterIds</code>.
+      </div>
+    `;
+
+    content.querySelectorAll(".item").forEach((el) => {
+      el.addEventListener("click", () => {
+        const id = el.getAttribute("data-id");
+        handlers.onSelectCritter?.(id);
+      });
+    });
+  }
+
+  function renderAccessoryTab() {
+    const eq = currentProfile?.equippedAccessories ?? {
+      head: null,
+      body: null,
+      aura: null,
+    };
+
+    content.innerHTML = `
+      <div class="grid">
+        ${["head", "body", "aura"]
+          .map((slot) => {
+            const val = eq[slot] ?? null;
+
+            return `
+              <div class="item ${val ? "selected" : ""}" data-slot="${slot}">
+                <div class="label">${slot.toUpperCase()}</div>
+                <div class="id">${val ?? "leer"}</div>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+      <div class="hint">
+        Accessoires sind aktuell noch Platzhalter.
+      </div>
+    `;
+
+    content.querySelectorAll(".item").forEach((el) => {
+      el.addEventListener("click", () => {
+        const slot = el.getAttribute("data-slot");
+        const cur = eq[slot] ?? null;
+        const next = cur ? null : `a_${slot}_01`;
+        handlers.onEquipAccessory?.(slot, next);
+      });
+    });
+  }
+
   function render() {
     if (!currentProfile) return;
 
@@ -1135,73 +1466,9 @@ function ensureInventoryDom({
     syncBtn.textContent = hasWallet ? "NFT Sync" : "Wallet fehlt";
 
     if (activeTab === "critter") {
-      const selected = currentProfile.selectedCritterId;
-      const ownedSet = new Set(currentProfile.ownedCritterIds ?? []);
-
-      content.innerHTML = `
-        <div class="grid">
-          ${CRITTERS.map((c) => {
-            const id = c.id;
-            const isOwned = ownedSet.has(id);
-            const imgSrc = `${getCritterAssetBase(c.folder)}/spritesheet.png`;
-
-            return `
-              <div class="item ${id === selected ? "selected" : ""} ${
-                !isOwned ? "locked" : ""
-              }" data-id="${id}">
-                ${!isOwned ? `<div class="lockBadge">NFT</div>` : ""}
-                <img src="${imgSrc}" alt="${c.name}" />
-                <div class="label">${c.name}</div>
-                <div class="id">#${c.nftNumber}</div>
-              </div>
-            `;
-          }).join("")}
-        </div>
-        <div class="hint">
-          Sichtbar sind alle Critter. Spielbar sind nur Critter aus <code>ownedCritterIds</code>.
-        </div>
-      `;
-
-      content.querySelectorAll(".item").forEach((el) => {
-        el.addEventListener("click", () => {
-          onSelectCritter(el.getAttribute("data-id"));
-        });
-      });
+      renderCritterTab();
     } else {
-      const eq =
-        currentProfile.equippedAccessories ?? {
-          head: null,
-          body: null,
-          aura: null,
-        };
-
-      content.innerHTML = `
-        <div class="grid">
-          ${["head", "body", "aura"]
-            .map((slot) => {
-              const val = eq[slot] ?? null;
-              return `
-                <div class="item ${val ? "selected" : ""}" data-slot="${slot}">
-                  <div class="label">${slot.toUpperCase()}</div>
-                  <div class="id">${val ?? "leer"}</div>
-                </div>
-              `;
-            })
-            .join("")}
-        </div>
-        <div class="hint">
-          Accessoires sind aktuell noch Platzhalter.
-        </div>
-      `;
-
-      content.querySelectorAll(".item").forEach((el) => {
-        el.addEventListener("click", () => {
-          const slot = el.getAttribute("data-slot");
-          const cur = currentProfile.equippedAccessories?.[slot] ?? null;
-          const next = cur ? null : `a_${slot}_01`;
-          onEquipAccessory(slot, next);
-        });
-      });
+      renderAccessoryTab();
     }
   }
 
@@ -1219,18 +1486,13 @@ function ensureInventoryDom({
   });
 
   syncBtn.addEventListener("click", async () => {
-    if (!currentProfile) return;
-
-    const hasWallet =
-      typeof currentProfile.wallet === "string" &&
-      currentProfile.wallet.length > 0;
-
-    if (!hasWallet) return;
+    if (!currentProfile?.wallet) return;
 
     syncBtn.disabled = true;
     syncBtn.textContent = "Sync läuft...";
+
     try {
-      await onRefreshOwnership();
+      await handlers.onRefreshOwnership?.();
     } finally {
       syncBtn.disabled = false;
       syncBtn.textContent = "NFT Sync";
@@ -1238,19 +1500,55 @@ function ensureInventoryDom({
   });
 
   root.__inv = {
+    setHandlers(nextHandlers) {
+      handlers = {
+        ...handlers,
+        ...nextHandlers,
+      };
+    },
+
     setProfile(p) {
-      currentProfile = p;
+      currentProfile = {
+        ...p,
+        equippedAccessories: {
+          head: p?.equippedAccessories?.head ?? null,
+          body: p?.equippedAccessories?.body ?? null,
+          aura: p?.equippedAccessories?.aura ?? null,
+        },
+        ownedCritterIds: Array.isArray(p?.ownedCritterIds)
+          ? [...p.ownedCritterIds]
+          : [],
+        ownedAccessoryIds: Array.isArray(p?.ownedAccessoryIds)
+          ? [...p.ownedAccessoryIds]
+          : [],
+      };
+
+      currentSelectedCritterId = currentProfile.selectedCritterId ?? "c1";
       render();
     },
+
+    setSelectedCritter(id) {
+      currentSelectedCritterId = id;
+
+      if (currentProfile) {
+        currentProfile.selectedCritterId = id;
+      }
+
+      render();
+    },
+
     open() {
       setOpen(true);
     },
+
     close() {
       setOpen(false);
     },
+
     toggle() {
       setOpen(!open);
     },
+
     setTab(t) {
       setTab(t);
       render();
@@ -1259,6 +1557,7 @@ function ensureInventoryDom({
 
   setOpen(false);
   setTab("critter");
+
   return root;
 }
 
@@ -1407,7 +1706,6 @@ function bindSceneTouchMovement(scene) {
     if (performance.now() < uiBlockTouchUntil) return;
 
     if (pointer.event?.target instanceof HTMLCanvasElement === false) return;
-    
     if (pointer.downElement && pointer.downElement !== scene.game.canvas) return;
 
     touchMoveActive = true;
@@ -1831,8 +2129,8 @@ class MenuScene extends Phaser.Scene {
     this.menuMusic = null;
     this.menuButtons = [];
     this.isStartingGame = false;
-    this.settingsOverlay = null;
     this.settingsJustClosedUntil = 0;
+    this.isTransitioning = false;
   }
 
   preload() {
@@ -1869,6 +2167,10 @@ class MenuScene extends Phaser.Scene {
 
   create() {
     const layout = this.getMenuLayout();
+
+    ensureSettingsDom();
+    ensureSceneTopButtons().__topButtons.hide();
+    this.isTransitioning = false;
 
     this.cameras.main.setBackgroundColor("#0b0b0f");
 
@@ -1930,7 +2232,7 @@ class MenuScene extends Phaser.Scene {
         layout.btnW,
         layout.btnH,
         "Settings",
-        () => openSceneSettings(this, this.getUiScale())
+        () => openSceneSettings(this)
       ),
 
       this.createMenuButton(
@@ -1966,6 +2268,7 @@ class MenuScene extends Phaser.Scene {
 
     this.events.once("shutdown", () => {
       this.scale.off("resize", this.onResize, this);
+      closeSceneSettings(this);
     });
   }
 
@@ -2098,10 +2401,6 @@ class MenuScene extends Phaser.Scene {
     if (this.menuButtons[2]) {
       this.menuButtons[2].setPosition(width / 2, layout.buttonYs[2]);
     }
-
-    if (this.settingsOverlay) {
-      closeSceneSettings(this);
-    }
   }
 }
 
@@ -2132,11 +2431,7 @@ class MainScene extends Phaser.Scene {
     this.targetMarker = null;
     this.invRoot = null;
     this.isTransitioning = false;
-    this.settingsOverlay = null;
     this.settingsJustClosedUntil = 0;
-    this.settingsButton = null;
-    this.inventoryButton = null;
-    this.topButtons = null;
   }
 
   preload() {
@@ -2146,7 +2441,6 @@ class MainScene extends Phaser.Scene {
 
     this.load.tilemapTiledJSON("evoMap", "/maps/evolucia.json");
     this.load.image("evoBg", "/maps/background_v2.png");
-
     this.load.image("evoFg", "/maps/foreground_v2.png");
 
     if (!MOBILE_LIGHT_MODE) {
@@ -2194,6 +2488,8 @@ class MainScene extends Phaser.Scene {
 
   create(data) {
     console.log("MAIN CREATE START", data);
+
+    ensureSettingsDom();
 
     this.isTransitioning = false;
     this.triggerCooldownUntil = 0;
@@ -2334,6 +2630,7 @@ class MainScene extends Phaser.Scene {
 
         profile.selectedCritterId = id;
         this.player.setTexture(getCritterIdleTexture(id));
+        this.invRoot.__inv.setSelectedCritter(id);
 
         apiSave({
           xp: profile.xp,
@@ -2386,7 +2683,8 @@ class MainScene extends Phaser.Scene {
 
     this.invRoot.__inv.setProfile(profile);
 
-    createSceneTopButtons(this, getSceneUiScale(this));
+    createSceneTopButtons(this);
+    updateSceneTopButtonsPosition();
 
     profile.x = startX;
     profile.y = startY;
@@ -2430,14 +2728,12 @@ class MainScene extends Phaser.Scene {
     this.events.once("shutdown", () => {
       this.scale.off("resize", this.onResize, this);
       saveCurrentPlayerState(this);
+      closeSceneSettings(this);
     });
   }
 
   onResize() {
-    updateSceneTopButtonsPosition(this, getSceneUiScale(this));
-    if (this.settingsOverlay) {
-      closeSceneSettings(this);
-    }
+    updateSceneTopButtonsPosition();
   }
 
   update(time) {
@@ -2563,16 +2859,14 @@ class DungeonScene extends Phaser.Scene {
     this._dbgGfx = null;
     this.nextSaveAt = 0;
     this.isTransitioning = false;
-    this.settingsOverlay = null;
     this.settingsJustClosedUntil = 0;
-    this.settingsButton = null;
-    this.inventoryButton = null;
-    this.topButtons = null;
     this.invRoot = null;
   }
 
   create(data) {
     console.log("DUNGEON CREATE START", data);
+
+    ensureSettingsDom();
 
     this.isTransitioning = false;
     this.triggerCooldownUntil = 0;
@@ -2694,6 +2988,7 @@ class DungeonScene extends Phaser.Scene {
 
         profile.selectedCritterId = id;
         this.player.setTexture(getCritterIdleTexture(id));
+        this.invRoot.__inv.setSelectedCritter(id);
 
         apiSave({
           xp: profile.xp,
@@ -2733,7 +3028,9 @@ class DungeonScene extends Phaser.Scene {
         try {
           await apiOwnershipRefresh();
           profile = normalizeProfile(await apiGetMe());
-          this.player.setTexture(getCritterIdleTexture(profile.selectedCritterId));
+          this.player.setTexture(
+            getCritterIdleTexture(profile.selectedCritterId)
+          );
           this.invRoot.__inv.setProfile(profile);
           updateHud("Dungeon");
         } catch (err) {
@@ -2744,7 +3041,8 @@ class DungeonScene extends Phaser.Scene {
 
     this.invRoot.__inv.setProfile(profile);
 
-    createSceneTopButtons(this, getSceneUiScale(this));
+    createSceneTopButtons(this);
+    updateSceneTopButtonsPosition();
 
     updateHud("Dungeon");
 
@@ -2752,14 +3050,12 @@ class DungeonScene extends Phaser.Scene {
     this.events.once("shutdown", () => {
       this.scale.off("resize", this.onResize, this);
       saveCurrentPlayerState(this);
+      closeSceneSettings(this);
     });
   }
 
   onResize() {
-    updateSceneTopButtonsPosition(this, getSceneUiScale(this));
-    if (this.settingsOverlay) {
-      closeSceneSettings(this);
-    }
+    updateSceneTopButtonsPosition();
   }
 
   update(time) {
@@ -2938,6 +3234,7 @@ async function bootstrap() {
   const applyViewportResize = () => {
     const { width, height } = getViewportSize();
     game.scale.resize(width, height);
+    updateSceneTopButtonsPosition();
   };
 
   window.addEventListener("resize", applyViewportResize);

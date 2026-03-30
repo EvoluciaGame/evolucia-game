@@ -1,5 +1,5 @@
 {
-    "activeFile": "evolucia.tmx",
+    "activeFile": "dungeon1.tmx",
     "expandedProjectPaths": [
         "."
     ],
@@ -10,7 +10,7 @@
                 3
             ],
             "scale": 0.29,
-            "selectedLayer": 2,
+            "selectedLayer": 1,
             "viewCenter": {
                 "x": 2048.2758620689656,
                 "y": 2048.275862068965
@@ -37,6 +37,9 @@
             }
         },
         "evolucia.tmx": {
+            "expandedObjectLayers": [
+                5
+            ],
             "scale": 0.5,
             "selectedLayer": 2,
             "viewCenter": {
@@ -48,7 +51,8 @@
     "last.exportedFilePath": "C:/Users/maxfr/OneDrive/Desktop/Investieren/NFTs/EvoluCritters/Evolucia_Game/webapp/public/maps",
     "map.lastUsedExportFilter": "Alle Dateien (*)",
     "openFiles": [
-        "evolucia.tmx"
+        "evolucia.tmx",
+        "dungeon1.tmx"
     ],
     "project": "evolucia.tiled-project",
     "property.type": "int",
